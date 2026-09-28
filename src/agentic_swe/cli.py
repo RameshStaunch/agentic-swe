@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import re
 import sys
 from datetime import datetime
@@ -8,10 +7,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic_ai.exceptions import UserError
+from pydantic_ai.models import Model
 from rich.console import Console
 
 from . import db
-from .agents import PROVIDER_KEYS
+from .agents import DEFAULT_MODEL, load_model
 from .models import Mode, Scope
 from .orchestrator import Ask, Gate, Orchestrator, Record, Result
 
@@ -26,10 +27,10 @@ def new_run_dir(requirement: str, out: Path | None) -> Path:
 
 
 async def execute(requirement: str, repo: Path, scope: Scope, mode: Mode, *, ask: Ask, answers: list[str], replay: Path | None,
-                  run_dir: Path, record: Record, console: Console) -> Result:
+                  run_dir: Path, record: Record, console: Console, model: Model | None = None) -> Result:
     run_dir.mkdir(parents=True, exist_ok=True)
     try:
-        return await Orchestrator(repo, scope, Gate(mode, ask, console, answers), record, run_dir, console, replay).run(requirement)
+        return await Orchestrator(repo, scope, Gate(mode, ask, console, answers), record, run_dir, console, replay, model).run(requirement)
     except Exception as e:
         await record("run_finished", {"status": "error", "error": repr(e)})
         raise
@@ -51,12 +52,18 @@ def run(
     replay: Annotated[Path | None, typer.Option(help="Replay agent outputs recorded in this run dir instead of calling the model.")] = None,
     out: Annotated[Path | None, typer.Option(help="Run output dir (default runs/<timestamp>-<slug>).")] = None,
     no_db: Annotated[bool, typer.Option("--no-db", help="Skip the Postgres audit trail.")] = False,
+    model: Annotated[str, typer.Option(help="Pydantic AI '<provider>:<model>', e.g. google:gemini-flash-latest, anthropic:claude-sonnet-5, openai:gpt-5. "
+                                            "The provider reads its own API key from the environment / .env. Default: $AGENTIC_SWE_MODEL.")] = DEFAULT_MODEL,
 ):
     """Take a requirement through analysis, planning, build, test, validation and summary."""
     if scope not in ("greenfield", "brownfield") or mode not in ("suggest", "auto-edit", "full-auto"):
         raise typer.BadParameter("scope must be greenfield|brownfield; mode must be suggest|auto-edit|full-auto")
-    if not replay and not any(os.environ.get(k) for k in PROVIDER_KEYS):
-        raise typer.BadParameter("set GOOGLE_API_KEY or ANTHROPIC_API_KEY (e.g. in .env) or pass --replay <recorded run dir>")
+    llm = None
+    if not replay:
+        try:
+            llm = load_model(model)
+        except (UserError, ImportError) as e:
+            raise typer.BadParameter(f"{model}: {e}  (or pass --replay <recorded run dir>)")
     console = Console(record=True)
     run_dir = new_run_dir(requirement, out)
 
@@ -75,10 +82,10 @@ def run(
             except OSError as e:
                 raise typer.BadParameter(f"can't reach Postgres ({e}); run `pixi run db-init`/`db-start`, or pass --no-db")
             run_id, record = await db.start_run(engine, requirement, scope, mode, str(run_dir))
-            console.print(f"[dim]run #{run_id} · {mode} · {run_dir}[/]")
+            console.print(f"[dim]run #{run_id} · {mode} · {'replay' if replay else model} · {run_dir}[/]")
         try:
             return await execute(requirement, repo, scope, mode, ask=ask, answers=answer or [],
-                                 replay=replay, run_dir=run_dir, record=record, console=console)
+                                 replay=replay, run_dir=run_dir, record=record, console=console, model=llm)
         finally:
             if engine:
                 await engine.dispose()

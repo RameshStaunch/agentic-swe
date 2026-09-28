@@ -7,13 +7,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai.models import Model, infer_model
 
 from .models import CodeChange, DesignDoc, EngineeringSummary, ImpactAnalysis, NormalizedRequirement, TaskGraph, ValidationReport
 
-MODEL = os.environ.get("AGENTIC_SWE_MODEL") or (
-    "google:gemini-flash-latest" if os.environ.get("GOOGLE_API_KEY") else "anthropic:claude-sonnet-5")
-PROVIDER_KEYS = ("GOOGLE_API_KEY", "ANTHROPIC_API_KEY")
+DEFAULT_MODEL = os.environ.get("AGENTIC_SWE_MODEL", "google:gemini-flash-latest")
 MAX_READ = 20_000
+
+
+def load_model(name: str) -> Model:
+    """Resolve a Pydantic AI '<provider>:<model>' string. The provider reads its own key (GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, ...) and raises if it is missing."""
+    return infer_model(name)
 
 
 @dataclass
@@ -58,7 +62,7 @@ def grep(ctx: RunContext[Repo], pattern: str) -> str:
 REPO_TOOLS = [list_files, read_file, grep]
 
 analyst = Agent(
-    MODEL, output_type=NormalizedRequirement, defer_model_check=True, name="requirement-analyst",
+    output_type=NormalizedRequirement, name="requirement-analyst",
     instructions=(
         "You are a staff engineer turning a raw requirement into an engineering problem statement. "
         "Be concrete. Flag an ambiguity only when two reasonable engineers would build materially different things; "
@@ -68,7 +72,7 @@ analyst = Agent(
 )
 
 decomposer = Agent(
-    MODEL, output_type=TaskGraph, defer_model_check=True, name="task-decomposer",
+    output_type=TaskGraph, name="task-decomposer",
     instructions=(
         "Break the requirement into 3-8 engineering tasks forming a DAG. Every task declares the exact files it may touch; "
         "tasks that can run in parallel must not share files. Tests are their own tasks and depend on the code they test. "
@@ -77,7 +81,7 @@ decomposer = Agent(
 )
 
 architect = Agent(
-    MODEL, output_type=DesignDoc, defer_model_check=True, name="architect",
+    output_type=DesignDoc, name="architect",
     instructions=(
         "Design a greenfield service for the requirement: components, a complete HTTP API contract, the data model as SQL DDL, "
         "and the key decisions with the trade-off each makes. Prefer boring, proven choices."
@@ -85,7 +89,7 @@ architect = Agent(
 )
 
 reasoner = Agent(
-    MODEL, output_type=ImpactAnalysis, deps_type=Repo, tools=REPO_TOOLS, defer_model_check=True, name="codebase-reasoner",
+    output_type=ImpactAnalysis, deps_type=Repo, tools=REPO_TOOLS, name="codebase-reasoner",
     instructions=(
         "You are onboarding onto an existing codebase. Use the tools to read the code before concluding anything. "
         "Identify exactly which files, APIs and data flows the requirement touches, and what could break."
@@ -93,7 +97,7 @@ reasoner = Agent(
 )
 
 coder = Agent(
-    MODEL, output_type=CodeChange, deps_type=Repo, tools=REPO_TOOLS, defer_model_check=True, name="coder", retries=2,
+    output_type=CodeChange, deps_type=Repo, tools=REPO_TOOLS, name="coder", retries=2,
     instructions=(
         "You implement one task. Output the FULL content of every file you create or change, and only files the task lists. "
         "Write production-quality, typed Python that follows the existing code's conventions. "
@@ -102,7 +106,7 @@ coder = Agent(
 )
 
 validator = Agent(
-    MODEL, output_type=ValidationReport, defer_model_check=True, name="validator",
+    output_type=ValidationReport, name="validator",
     instructions=(
         "You review a change before it ships. Given the requirement, plan, diff and test results, list concrete risks, "
         "trade-offs, failure scenarios and the guardrails that mitigate them. Recommend 'revise' if tests fail or the diff "
@@ -111,6 +115,6 @@ validator = Agent(
 )
 
 summarizer = Agent(
-    MODEL, output_type=EngineeringSummary, defer_model_check=True, name="summarizer",
+    output_type=EngineeringSummary, name="summarizer",
     instructions="Write the final engineering summary for a reviewer who has five minutes. Plain language, no filler.",
 )

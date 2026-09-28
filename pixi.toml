@@ -24,6 +24,8 @@ hatchling = "*"
 pip = "*"
 google-genai = ">=2.25.0,<3"
 gh = ">=2.101.0,<3"
+anthropic = ">=1.8.0,<2"
+openai = ">=3.19.2,<4"
 
 [pypi-dependencies]
 agentic_swe = { path = ".", editable = true }

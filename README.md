@@ -21,15 +21,15 @@ pixi run db-init          # creates a local Postgres cluster in ./pgdata on port
 
 After a reboot, `pixi run db-start` (and `pixi run db-stop` to stop it).
 
-For live runs, put a model API key in `.env` (gitignored). Google Gemini is used when `GOOGLE_API_KEY` is set, otherwise Anthropic:
+For live runs, pick any Pydantic AI model with `--model <provider>:<model>` (or set `AGENTIC_SWE_MODEL`). The provider reads its own API key from the environment or `.env` (gitignored), so only the key for the provider you pick is needed:
 
-```bash
-echo 'GOOGLE_API_KEY=...' > .env          # default model google:gemini-flash-latest
-# or ANTHROPIC_API_KEY=...                  (default anthropic:claude-sonnet-5)
-# override with AGENTIC_SWE_MODEL=<pydantic-ai model string>, e.g. google:gemini-pro-latest
-```
+| `--model` | Key |
+|---|---|
+| `google:gemini-flash-latest` (default) | `GOOGLE_API_KEY` |
+| `anthropic:claude-sonnet-5` | `ANTHROPIC_API_KEY` |
+| `openai:gpt-5` | `OPENAI_API_KEY` |
 
-Rate-limit and overload errors (429/5xx) are retried with backoff. Note that the Gemini free tier has no quota for Pro models.
+A missing key or unknown model fails before the run starts. Rate-limit and overload errors (429/5xx) are retried with backoff. The Gemini free tier has no quota for Pro models.
 
 ## Demos (no API key needed)
 

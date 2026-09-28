@@ -14,6 +14,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.models import Model
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -178,8 +179,8 @@ def run_tests(repo: Path) -> tuple[bool, str]:
 class Steps:
     """Every agent output is saved as steps/<name>.json. With a replay dir, outputs are read back instead of calling the model."""
 
-    def __init__(self, run_dir: Path, replay: Path | None):
-        self.dir, self.replay = run_dir / "steps", replay
+    def __init__(self, run_dir: Path, replay: Path | None, model: Model | None = None):
+        self.dir, self.replay, self.model = run_dir / "steps", replay, model
         self.dir.mkdir(parents=True, exist_ok=True)
 
     async def call[T: BaseModel](self, name: str, agent: Agent[..., T], prompt: str, deps: Repo | None = None) -> T:
@@ -192,7 +193,7 @@ class Steps:
         else:
             for attempt in range(4):
                 try:
-                    out = (await agent.run(prompt, deps=deps)).output
+                    out = (await agent.run(prompt, deps=deps, model=self.model)).output
                     break
                 except ModelHTTPError as e:  # rate limits and provider overload are transient
                     if e.status_code not in (429, 500, 502, 503, 504) or attempt == 3:
@@ -200,6 +201,9 @@ class Steps:
                     await asyncio.sleep(5 * 2 ** attempt)
         (self.dir / f"{name}.json").write_text(out.model_dump_json(indent=2))
         return out
+
+    def can_call(self, name: str) -> bool:
+        return not self.replay or (self.replay / "steps" / f"{name}.json").exists()
 
 
 @dataclass
@@ -219,9 +223,10 @@ def dump(m: BaseModel | None) -> str:
 
 
 class Orchestrator:
-    def __init__(self, repo: Path, scope: Scope, gate: Gate, record: Record, run_dir: Path, console: Console, replay: Path | None = None):
+    def __init__(self, repo: Path, scope: Scope | None, gate: Gate, record: Record, run_dir: Path, console: Console,
+                 replay: Path | None = None, model: Model | None = None):
         self.repo, self.scope, self.gate, self.record, self.run_dir, self.console = repo.resolve(), scope, gate, record, run_dir, console
-        self.steps = Steps(run_dir, replay)
+        self.steps = Steps(run_dir, replay, model)
         self.originals: dict[str, str] = {}
         self.written: dict[str, str] = {}
 
@@ -229,20 +234,35 @@ class Orchestrator:
         res = Result(status="running", run_dir=self.run_dir)
         c = self.console
         self.repo.mkdir(parents=True, exist_ok=True)
-        await self.record("run_started", {"requirement": requirement, "scope": self.scope, "mode": self.gate.mode, "repo": str(self.repo)})
+        await self.record("run_started", {"requirement": requirement, "scope": self.scope, "mode": self.gate.mode, "repo": str(self.repo),
+                                            "model": f"{m.system}:{m.model_name}" if (m := self.steps.model) else "replay"})
 
         # 1. Understand
         c.rule("[bold]1 · Requirement analysis")
-        req = await self.steps.call("1-analyst", agents.analyst, f"Scope: {self.scope}\nRequirement: {requirement}")
+        files = sorted(str(p.relative_to(self.repo)) for p in self.repo.rglob("*")
+                       if p.is_file() and not any(part.startswith(".") or part == "__pycache__" for part in p.relative_to(self.repo).parts))
+        snapshot = "\n".join(files[:80]) or "(empty directory)"
+        scope_line = f"Scope: {self.scope}" if self.scope else "Scope: decide from the repository snapshot (empty or unrelated -> greenfield, existing code to change -> brownfield)"
+        prompt = f"{scope_line}\nRequirement: {requirement}\n\nRepository snapshot ({len(files)} files):\n{snapshot}"
+        req = await self.steps.call("1-analyst", agents.analyst, prompt)
+        clarifications: list[str] = []
+        for round_ in range(2, 4):  # answers can surface new questions; at most two follow-up rounds
+            self._show_requirement(req)
+            answers = await self.gate.clarify(req)
+            if not answers:
+                break
+            clarifications += answers
+            await self.record("clarification", {"answers": answers})
+            c.print(Panel("\n".join(answers), title="Clarifications"))
+            step = f"1-analyst-r{round_}"
+            if self.gate.answers or self.gate.mode == "full-auto" or not self.steps.can_call(step):
+                break
+            req = await self.steps.call(step, agents.analyst, prompt + "\n\nAnswers so far:\n" + "\n".join(clarifications)
+                                        + "\nOnly list ambiguities that are still open after these answers.")
+        self.scope = self.scope or req.scope
         res.requirement = req
         await self.record("requirement", req.model_dump())
-        c.print(Panel(f"[bold]{req.intent}[/]\n\n" + "\n".join(f"• {a}" for a in req.acceptance_criteria), title="Normalized requirement"))
-        if req.ambiguities:
-            c.print(Panel("\n".join(f"• {a}" for a in req.ambiguities), title="[yellow]Ambiguities", border_style="yellow"))
-        clarifications = await self.gate.clarify(req)
-        if clarifications:
-            await self.record("clarification", {"answers": clarifications})
-            c.print(Panel("\n".join(clarifications), title="Clarifications"))
+        c.print(f"[bold]Classified:[/] {self.scope} · {'ambiguous, clarified' if clarifications else 'clear'}")
 
         # 2. Understand the system (design for greenfield, impact analysis for brownfield)
         context: DesignDoc | ImpactAnalysis
@@ -395,6 +415,11 @@ class Orchestrator:
             "".join(difflib.unified_diff(self.originals[p].splitlines(True), (self.repo / p).read_text().splitlines(True),
                                          f"a/{self.repo.name}/{p}", f"b/{self.repo.name}/{p}"))
             for p in sorted(self.written))
+
+    def _show_requirement(self, req: NormalizedRequirement) -> None:
+        self.console.print(Panel(f"[bold]{req.intent}[/]\n\n" + "\n".join(f"• {a}" for a in req.acceptance_criteria), title="Normalized requirement"))
+        if req.ambiguities:
+            self.console.print(Panel("\n".join(f"• {a}" for a in req.ambiguities), title="[yellow]Ambiguities", border_style="yellow"))
 
     def _print_plan(self, graph: TaskGraph) -> None:
         t = Table("Task", "Kind", "Depends on", "Files", title="Task graph")

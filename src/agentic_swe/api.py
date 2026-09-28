@@ -1,16 +1,16 @@
 """HTTP front door to the orchestrator. Runs are full-auto (no human at a terminal); humans review the result via GET /runs/{id}."""
 
 import asyncio
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from pydantic_ai.exceptions import UserError
 from rich.console import Console
 
 from . import db
-from .agents import PROVIDER_KEYS
+from .agents import DEFAULT_MODEL, load_model
 from .cli import execute, new_run_dir
 from .models import Scope
 
@@ -34,6 +34,7 @@ class RunRequest(BaseModel):
     scope: Scope = "greenfield"
     answers: list[str] = []
     replay: str | None = None
+    model: str = DEFAULT_MODEL
 
 
 def _inside_workspace(rel: str) -> Path:
@@ -51,12 +52,16 @@ def _no_terminal(question: str) -> str:
 async def create_run(body: RunRequest) -> dict:
     repo = _inside_workspace(body.repo)
     replay = _inside_workspace(body.replay) if body.replay else None
-    if not replay and not any(os.environ.get(k) for k in PROVIDER_KEYS):
-        raise HTTPException(400, "no model API key is set; pass `replay` to replay a recorded run")
+    llm = None
+    if not replay:
+        try:
+            llm = load_model(body.model)
+        except (UserError, ImportError) as e:
+            raise HTTPException(400, f"{body.model}: {e}")
     run_dir = new_run_dir(body.requirement, None)
     run_id, record = await db.start_run(app.state.engine, body.requirement, body.scope, "full-auto", str(run_dir))
     task = asyncio.create_task(execute(body.requirement, repo, body.scope, "full-auto", ask=_no_terminal, answers=body.answers,
-                                       replay=replay, run_dir=run_dir, record=record, console=Console(record=True, quiet=True)))
+                                       replay=replay, run_dir=run_dir, record=record, console=Console(record=True, quiet=True), model=llm))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return {"id": run_id, "run_dir": str(run_dir)}
