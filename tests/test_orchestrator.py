@@ -105,8 +105,10 @@ def run_replay(tmp_path, steps):
     async def record(kind, payload):
         events.append((kind, payload))
 
-    orch = Orchestrator(repo, "greenfield", Gate("full-auto", never_ask, quiet()), record, tmp_path / "run", quiet(), replay)
-    return asyncio.run(orch.run("add two numbers")), events, repo
+    orch = Orchestrator(repo, None, Gate("full-auto", never_ask, quiet()), record, tmp_path / "run", quiet(), replay)  # analyst decides scope
+    res = asyncio.run(orch.run("add two numbers"))
+    assert orch.scope == "greenfield"
+    return res, events, repo
 
 
 def test_failing_tests_trigger_a_fix_task(tmp_path):

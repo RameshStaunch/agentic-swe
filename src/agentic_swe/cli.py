@@ -16,7 +16,15 @@ from .agents import DEFAULT_MODEL, load_model
 from .models import Mode, Scope
 from .orchestrator import Ask, Gate, Orchestrator, Record, Result
 
-app = typer.Typer(add_completion=False, help="Agentic software engineering: requirement in, reviewable change out.")
+app = typer.Typer(add_completion=False, help="Agentic software engineering: requirement in, reviewable change out. "
+                  "Run with no command for an interactive session.")
+
+
+@app.callback(invoke_without_command=True)
+def interactive(ctx: typer.Context):
+    if ctx.invoked_subcommand is None:
+        from .session import Session
+        Session().loop()
 
 
 def new_run_dir(requirement: str, out: Path | None) -> Path:
@@ -26,7 +34,7 @@ def new_run_dir(requirement: str, out: Path | None) -> Path:
     return Path("runs") / f"{datetime.now():%Y%m%d-%H%M%S}-{slug}"
 
 
-async def execute(requirement: str, repo: Path, scope: Scope, mode: Mode, *, ask: Ask, answers: list[str], replay: Path | None,
+async def execute(requirement: str, repo: Path, scope: Scope | None, mode: Mode, *, ask: Ask, answers: list[str], replay: Path | None,
                   run_dir: Path, record: Record, console: Console, model: Model | None = None) -> Result:
     run_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -42,11 +50,40 @@ async def _noop(kind: str, payload: dict) -> None:
     pass
 
 
+def terminal_ask(console: Console) -> Ask:
+    def ask(question: str) -> str:
+        answer = console.input(question)
+        if not sys.stdin.isatty():  # piped answers aren't echoed; print them so the transcript shows the decision
+            console.print(answer)
+        return answer
+    return ask
+
+
+async def run_once(requirement: str, repo: Path, scope: Scope | None, mode: Mode, *, model_name: str, llm: Model | None,
+                   replay: Path | None, answers: list[str], out: Path | None, no_db: bool, console: Console) -> Result:
+    run_dir = new_run_dir(requirement, out)
+    record: Record = _noop
+    engine = None
+    if not no_db:
+        try:
+            engine = await db.connect()
+        except OSError as e:
+            raise typer.BadParameter(f"can't reach Postgres ({e}); run `pixi run db-init`/`db-start`, or pass --no-db")
+        run_id, record = await db.start_run(engine, requirement, scope or "auto", mode, str(run_dir))
+        console.print(f"[dim]run #{run_id} · {mode} · {'replay' if replay else model_name} · {run_dir}[/]")
+    try:
+        return await execute(requirement, repo, scope, mode, ask=terminal_ask(console), answers=answers,
+                             replay=replay, run_dir=run_dir, record=record, console=console, model=llm)
+    finally:
+        if engine:
+            await engine.dispose()
+
+
 @app.command()
 def run(
     requirement: str,
     repo: Annotated[Path, typer.Option(help="Repository the agents work in (created if missing).")],
-    scope: Annotated[str, typer.Option(help="greenfield | brownfield")] = "greenfield",
+    scope: Annotated[str | None, typer.Option(help="greenfield | brownfield (default: the analyst decides from the repo)")] = None,
     mode: Annotated[str, typer.Option(help="suggest (approve every edit) | auto-edit (approve plan + out-of-scope writes) | full-auto")] = "suggest",
     answer: Annotated[list[str] | None, typer.Option(help="Pre-answer clarifying questions (repeatable).")] = None,
     replay: Annotated[Path | None, typer.Option(help="Replay agent outputs recorded in this run dir instead of calling the model.")] = None,
@@ -56,7 +93,7 @@ def run(
                                             "The provider reads its own API key from the environment / .env. Default: $AGENTIC_SWE_MODEL.")] = DEFAULT_MODEL,
 ):
     """Take a requirement through analysis, planning, build, test, validation and summary."""
-    if scope not in ("greenfield", "brownfield") or mode not in ("suggest", "auto-edit", "full-auto"):
+    if scope not in (None, "greenfield", "brownfield") or mode not in ("suggest", "auto-edit", "full-auto"):
         raise typer.BadParameter("scope must be greenfield|brownfield; mode must be suggest|auto-edit|full-auto")
     llm = None
     if not replay:
@@ -65,32 +102,8 @@ def run(
         except (UserError, ImportError) as e:
             raise typer.BadParameter(f"{model}: {e}  (or pass --replay <recorded run dir>)")
     console = Console(record=True)
-    run_dir = new_run_dir(requirement, out)
-
-    def ask(question: str) -> str:
-        answer = console.input(question)
-        if not sys.stdin.isatty():  # piped answers aren't echoed; print them so the transcript shows the decision
-            console.print(answer)
-        return answer
-
-    async def main():
-        record: Record = _noop
-        engine = None
-        if not no_db:
-            try:
-                engine = await db.connect()
-            except OSError as e:
-                raise typer.BadParameter(f"can't reach Postgres ({e}); run `pixi run db-init`/`db-start`, or pass --no-db")
-            run_id, record = await db.start_run(engine, requirement, scope, mode, str(run_dir))
-            console.print(f"[dim]run #{run_id} · {mode} · {'replay' if replay else model} · {run_dir}[/]")
-        try:
-            return await execute(requirement, repo, scope, mode, ask=ask, answers=answer or [],
-                                 replay=replay, run_dir=run_dir, record=record, console=console, model=llm)
-        finally:
-            if engine:
-                await engine.dispose()
-
-    result = asyncio.run(main())
+    result = asyncio.run(run_once(requirement, repo, scope, mode, model_name=model, llm=llm, replay=replay,
+                                  answers=answer or [], out=out, no_db=no_db, console=console))
     raise typer.Exit(0 if result.status in ("ready_for_review", "needs_review") else 1)
 
 

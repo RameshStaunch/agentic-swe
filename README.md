@@ -31,6 +31,14 @@ For live runs, pick any Pydantic AI model with `--model <provider>:<model>` (or 
 
 A missing key or unknown model fails before the run starts. Rate-limit and overload errors (429/5xx) are retried with backoff. The Gemini free tier has no quota for Pro models.
 
+## Interactive session
+
+```bash
+pixi run agentic-swe
+```
+
+Like Claude Code: pick a model (the menu shows which provider keys are set, or choose **replay** to run the recorded examples with no API calls), then describe what you want in plain language. The analyst looks at the working directory and decides whether it is **greenfield** or **brownfield**; if the request is **ambiguous** it asks clarifying questions, and asks again if your answers leave things open (up to two follow-up rounds). You pick the autonomy mode once, then it plans, builds, tests and validates. Commands: `/model`, `/mode`, `/repo`, `/runs`, `/help`, `/exit`.
+
 ## Demos (no API key needed)
 
 Each demo replays a recorded run: the agent outputs come from `examples/<name>/steps/`, but everything else is real. The orchestrator applies the files through the approval gate, runs the test suite, computes the diff, and writes the audit trail.
@@ -49,13 +57,13 @@ pixi run demo-ambiguous     # ambiguous,  auto-edit:  "make the notes API faster
 
 > **How the recordings were made:** live calls were out of scope while building this, so the agent outputs in `examples/*/steps/` were written by hand in the exact typed schemas the agents return. They are a faithful stand-in for model output, not a captured model run. Run any demo without `--replay` (below) to record a live one; it writes the same files.
 
-## Live runs
+## Scripted runs
 
 ```bash
 pixi run agentic-swe run "Build a scalable URL shortener service with APIs, persistence, and analytics." \
-    --repo url_shortener --scope greenfield --mode suggest
+    --repo url_shortener --mode suggest --model google:gemini-flash-latest
 
-pixi run agentic-swe run "Add rate limiting to note creation" --repo work/notes --scope brownfield --mode auto-edit
+pixi run agentic-swe run "Add rate limiting to note creation" --repo work/notes --mode auto-edit   # --scope is optional; the analyst decides
 ```
 
 Every run writes `runs/<timestamp>-<slug>/` with `summary.md`, `changes.patch`, `tests.txt`, `transcript.txt` and `steps/*.json` (every agent output, which is also what `--replay` reads). Pass `--out examples/<name>` to record a new example.
