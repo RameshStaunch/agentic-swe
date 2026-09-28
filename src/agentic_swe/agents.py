@@ -17,6 +17,9 @@ MAX_READ = 20_000
 
 def load_model(name: str) -> Model:
     """Resolve a Pydantic AI '<provider>:<model>' string. The provider reads its own key (GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, ...) and raises if it is missing."""
+    if name == "mock":
+        from .mock import mock_model
+        return mock_model()
     return infer_model(name)
 
 

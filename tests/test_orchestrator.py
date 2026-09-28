@@ -160,3 +160,19 @@ def test_examples_replay_to_green(tmp_path, example, requirement, scope, seed):
     orch = Orchestrator(repo, scope, Gate("full-auto", never_ask, quiet(), answers), record, tmp_path / "run", quiet(), ROOT / "examples" / example)
     res = asyncio.run(orch.run(requirement))
     assert res.status == "ready_for_review", (tmp_path / "run" / "tests.txt").read_text()
+
+
+def test_mock_model_drives_the_live_agent_path(tmp_path):
+    """No replay: every step goes through agent.run() with the offline mock model."""
+    from agentic_swe.agents import load_model
+
+    repo = tmp_path / "repo"
+    shutil.copytree(ROOT / "seed_repo", repo, ignore=shutil.ignore_patterns("__pycache__"))
+
+    async def record(kind, payload):
+        pass
+
+    orch = Orchestrator(repo, None, Gate("full-auto", never_ask, quiet()), record, tmp_path / "run", quiet(), model=load_model("mock"))
+    res = asyncio.run(orch.run("Add pagination to the notes list endpoint"))
+    assert orch.scope == "brownfield" and res.status == "ready_for_review"
+    assert (tmp_path / "run" / "steps" / "4-task-paginate-list.json").exists()

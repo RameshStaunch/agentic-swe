@@ -25,11 +25,20 @@ For live runs, pick any Pydantic AI model with `--model <provider>:<model>` (or 
 
 | `--model` | Key |
 |---|---|
+| `mock` | none: offline, answers from the recorded examples (see below) |
 | `google:gemini-flash-latest` (default) | `GOOGLE_API_KEY` |
 | `anthropic:claude-sonnet-5` | `ANTHROPIC_API_KEY` |
 | `openai:gpt-5` | `OPENAI_API_KEY` |
 
 A missing key or unknown model fails before the run starts. Rate-limit and overload errors (429/5xx) are retried with backoff. The Gemini free tier has no quota for Pro models.
+
+## Mock model
+
+`--model mock` (or option 1 in the session menu) is an offline stand-in for an LLM. It answers each agent from the recorded examples, but unlike `--replay` it goes through the real Pydantic AI agent loop: output tools, schema validation and the decomposer's graph validator all run. It picks the example from words in your requirement ("faster"/"slow" → the ambiguous example, "pagination" → brownfield, anything else → the URL shortener), so use it to test the flow, not to get code that matches an arbitrary request.
+
+```bash
+pixi run agentic-swe run "Make the notes API faster" --repo work/notes --model mock
+```
 
 ## Interactive session
 

@@ -16,6 +16,7 @@ from .cli import run_once
 from .models import Mode
 
 MODELS = [  # (pydantic-ai model string, env var its provider reads)
+    ("mock", ""),
     ("google:gemini-flash-latest", "GOOGLE_API_KEY"),
     ("google:gemini-pro-latest", "GOOGLE_API_KEY"),
     ("anthropic:claude-sonnet-5", "ANTHROPIC_API_KEY"),
@@ -55,11 +56,12 @@ class Session:
     def choose_model(self) -> None:
         t = Table("#", "Model", "Key", title="Choose a model", title_justify="left")
         for i, (name, key) in enumerate(MODELS, 1):
-            t.add_row(str(i), name, f"[green]{key} set[/]" if os.environ.get(key) else f"[dim]{key} missing[/]")
+            status = "offline, answers from the recorded examples" if not key else f"[green]{key} set[/]" if os.environ.get(key) else f"[dim]{key} missing[/]"
+            t.add_row(str(i), name, status)
         t.add_row("c", "custom", "any Pydantic AI '<provider>:<model>'")
         t.add_row("r", "replay", "recorded examples, no API calls")
         self.console.print(t)
-        default = next((str(i) for i, (n, k) in enumerate(MODELS, 1) if n == DEFAULT_MODEL and os.environ.get(k)), "r")
+        default = next((str(i) for i, (n, k) in enumerate(MODELS, 1) if n == DEFAULT_MODEL and (not k or os.environ.get(k))), "1")
         while True:
             pick = self.ask("Model", default).lower()
             if pick == "r":
