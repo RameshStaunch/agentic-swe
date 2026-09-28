@@ -1,5 +1,5 @@
---- a/seed_go-20260928-211316/README.md
-+++ b/seed_go-20260928-211316/README.md
+--- a/seed_go-20260928-214251/README.md
++++ b/seed_go-20260928-214251/README.md
 @@ -2,7 +2,7 @@
  
  A small in-memory todo API used as the Go brownfield target. Standard library only.
@@ -9,8 +9,8 @@
  - `GET /todos` lists them
  
  Run tests with `go test ./...`.
---- a/seed_go-20260928-211316/todo.go
-+++ b/seed_go-20260928-211316/todo.go
+--- a/seed_go-20260928-214251/todo.go
++++ b/seed_go-20260928-214251/todo.go
 @@ -3,9 +3,36 @@
  
  import (
@@ -70,8 +70,8 @@
  	})
  	mux.HandleFunc("GET /todos", func(w http.ResponseWriter, r *http.Request) {
  		w.Header().Set("Content-Type", "application/json")
---- a/seed_go-20260928-211316/validate_test.go
-+++ b/seed_go-20260928-211316/validate_test.go
+--- a/seed_go-20260928-214251/validate_test.go
++++ b/seed_go-20260928-214251/validate_test.go
 @@ -0,0 +1,62 @@
 +package todo
 +

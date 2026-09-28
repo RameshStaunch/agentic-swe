@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 from pydantic_ai.exceptions import UserError
@@ -49,9 +50,15 @@ class Session:
         self.mode: Mode | None = None
         self.repo: Path | None = None
 
+    def _input(self, prompt: str) -> str:
+        line = self.console.input(prompt)
+        if not sys.stdin.isatty():  # piped answers aren't echoed; print them so transcripts show what was typed
+            self.console.print(line)
+        return line
+
     def ask(self, prompt: str, default: str = "") -> str:
         hint = f" [dim]({default})[/]" if default else ""
-        return self.console.input(f"{prompt}{hint} ").strip() or default
+        return self._input(f"{prompt}{hint} ").strip() or default
 
     # ---------------------------------------------------------------- choices
     def choose_model(self) -> None:
@@ -135,7 +142,7 @@ class Session:
             self.console.print("[dim]Replay mode: press enter to pick a recorded example (/model to switch to a live model).[/]")
         while True:
             try:
-                line = self.console.input("\n[bold cyan]›[/] ").strip()
+                line = self._input("\n[bold cyan]›[/] ").strip()
             except (EOFError, KeyboardInterrupt):
                 break
             if not line and not self.replay:

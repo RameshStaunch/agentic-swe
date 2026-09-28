@@ -1,2 +1,2 @@
 [go: go test ./...] [toolchain: isolated pixi env (~/Documents/experiments/agentic-swe/work/.toolchains/go)] [sandbox: sandbox-exec: writes limited to repo + scratch + toolchain cache, network localhost only]
-ok  	example.com/todo	0.443s
+ok  	example.com/todo	0.441s

@@ -1,0 +1,102 @@
+╭────────────────────────────────────────────────────╮
+│ agentic-swe  requirement in, reviewable change out │
+╰────────────────────────────────────────────────────╯
+Choose a model
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ # ┃ Model                            ┃ Key                                         ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1 │ mock                             │ offline, answers from the recorded examples │
+│ 2 │ openrouter:qwen/qwen3.8-27b:free │ OPENROUTER_API_KEY set                      │
+│ 3 │ google:gemini-flash-latest       │ GOOGLE_API_KEY set                          │
+│ 4 │ google:gemini-pro-latest         │ GOOGLE_API_KEY set                          │
+│ 5 │ anthropic:claude-sonnet-5        │ ANTHROPIC_API_KEY missing                   │
+│ 6 │ anthropic:claude-opus-5-5        │ ANTHROPIC_API_KEY missing                   │
+│ 7 │ openai:gpt-5                     │ OPENAI_API_KEY missing                      │
+│ c │ custom                           │ any Pydantic AI '<provider>:<model>'        │
+│ r │ replay                           │ recorded examples, no API calls             │
+└───┴──────────────────────────────────┴─────────────────────────────────────────────┘
+Model (2) 1
+Using mock
+
+Describe what you want built or changed, or use a command:
+  /model   switch model        /mode   switch autonomy mode
+  /repo    switch directory    /runs   recent runs
+  /help    this help           /exit   quit
+
+› Reject todos with an empty or overlong title
+Which directory should I work in? Enter for a new project (new) seed_go
+seed_go has 4 files. Work on a timestamped copy or edit in place? (copy)
+copied to work/seed_go-20260928-214239; seed_go is untouched
+  1. suggest  approve the plan and every edit
+  2. auto-edit  approve the plan; edits apply unless they leave a task's declared files
+  3. full-auto  no prompts; review the summary at the end
+Autonomy (1) 2
+run #29 · auto-edit · mock · runs/20260928-214239-reject-todos-with-an-empty-or-overlong-t
+───────────────────────────────────── 1 · Requirement analysis ─────────────────────────────────────
+╭───────────────────────────────────── Normalized requirement ─────────────────────────────────────╮
+│ Make POST /todos reject titles that are empty (after trimming whitespace) or longer than a       │
+│ sensible limit, with a clear 400 error, instead of storing them.                                 │
+│                                                                                                  │
+│ • Empty and whitespace-only titles return 400 and store nothing.                                 │
+│ • Titles over 200 characters return 400; exactly 200 is accepted, including multi-byte           │
+│ characters.                                                                                      │
+│ • Valid titles are stored trimmed and return 201 as before.                                      │
+│ • Malformed JSON still returns 400, now with a JSON error body.                                  │
+│ • go test ./... passes, including the existing test.                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+Classified: brownfield · clear · go
+─────────────────────────────────── 2 · Codebase impact analysis ───────────────────────────────────
+╭───────────────────────────────────────────── Impact ─────────────────────────────────────────────╮
+│ The service is one package: todo.go holds the Store and an http.ServeMux with POST /todos and    │
+│ GET /todos. POST decodes the body and passes the title straight to Store.Add with no checks, and │
+│ the decoder reads an unbounded body. Validation belongs in the handler, as a pure function that  │
+│ is easy to unit test; the Store and GET /todos are unaffected.                                   │
+│                                                                                                  │
+│ Files: todo.go, validate_test.go (new), README.md                                                │
+│ APIs: POST /todos: new 400 responses with a JSON error body; titles are trimmed before storing   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+────────────────────────────────────── 3 · Task decomposition ──────────────────────────────────────
+                                   Task graph
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Task                           ┃ Kind    ┃ Depends on     ┃ Files            ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ validate-title                 │ codegen │ -              │ todo.go          │
+│ Validate titles in POST /todos │         │                │                  │
+│ validation-tests               │ test    │ validate-title │ validate_test.go │
+│ Validation tests               │         │                │                  │
+│ docs                           │ docs    │ validate-title │ README.md        │
+│ Document the title rules       │         │                │                  │
+└────────────────────────────────┴─────────┴────────────────┴──────────────────┘
+One handler change carries the behaviour; tests and docs both depend on its final contract and can
+run in parallel after it.
+execution waves: (validate-title) → (validation-tests, docs)
+Approve this plan?  y
+──────────────────────────────────────────── 4 · Build ─────────────────────────────────────────────
+wave 1: validate-title
+  ✓ validate-title todo.go
+wave 2: validation-tests, docs
+  ✓ validation-tests validate_test.go
+  ✓ docs README.md
+──────────────────────────────────────── 5 · Test & recover ────────────────────────────────────────
+go not installed. How should I run the tests?
+  1. install go from conda-forge into an isolated pixi env under work/.toolchains/ (nothing global)
+  2. run a command you give me, e.g. docker run --rm -v "$PWD":/w -w /w golang:1.22 go test ./...
+  3. skip the tests
+> 1
+go toolchain: isolated pixi env (~/Documents/experiments/agentic-swe/work/.toolchains/go)
+tests: passed
+─────────────────────────────────── 6 · Validation & risk review ───────────────────────────────────
+╭─────────────────────────────────────── Validator: approve ───────────────────────────────────────╮
+│ • Malformed-JSON errors change from plain text to a JSON body.                                   │
+│ • Previously accepted blank titles are now rejected; any client sending them will start seeing   │
+│ 400s.                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────────────── 7 · Summary ────────────────────────────────────────────
+ready_for_review → runs/20260928-214239-reject-todos-with-an-empty-or-overlong-t/summary.md
+
+ready_for_review. Review runs/20260928-214239-reject-todos-with-an-empty-or-overlong-t/summary.md
+and runs/20260928-214239-reject-todos-with-an-empty-or-overlong-t/changes.patch
+
+
+› /exit
+bye

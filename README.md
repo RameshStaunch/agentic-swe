@@ -40,6 +40,96 @@ A Claude Code style session:
 
 Commands between requests: `/model`, `/mode`, `/repo`, `/runs`, `/help`, `/exit`.
 
+### Interactive examples
+
+These are excerpts from real sessions using the offline `mock` model, so you can reproduce them without an API key. Full transcripts are in [`examples/sessions/`](examples/sessions/). Lines after `›`, `?`, `>` or a `(default)` hint are what was typed; an empty answer takes the default.
+
+**An ambiguous request on an existing codebase** ([full transcript](examples/sessions/ambiguous-brownfield.txt)): it works on a copy of `seed_repo`, asks three questions before planning, then asks for plan approval (auto-edit mode).
+
+```
+› Make the notes API faster
+Which directory should I work in? Enter for a new project (new) seed_repo
+seed_repo has 6 files. Work on a timestamped copy or edit in place? (copy)
+copied to work/seed_repo-20260928-214133; seed_repo is untouched
+  1. suggest  approve the plan and every edit
+  2. auto-edit  approve the plan; edits apply unless they leave a task's declared files
+  3. full-auto  no prompts; review the summary at the end
+Autonomy (1) 2
+───────────────────────── 1 · Requirement analysis ─────────────────────────
+? Which endpoint is slow, or is it all of them?
+  enter = The list endpoint, since it is the only one whose cost grows with data size.
+> The list endpoint, it gets slow with a few thousand notes
+? What does 'fast enough' mean: a latency target at what data size?
+  enter = Constant query count for listing, regardless of how many notes exist.
+> Constant number of queries per request
+? May the API contract change, or must it stay backward compatible?
+  enter = No breaking API changes.
+> No breaking API changes
+Classified: brownfield · ambiguous, clarified · python
+───────────────────────── 2 · Codebase impact analysis ─────────────────────
+GET /notes runs one query for the notes and then one tag query per note ... 1+N queries.
+───────────────────────── 3 · Task decomposition ───────────────────────────
+execution waves: (indexes, batch-tags) → (perf-tests, docs)
+Approve this plan?  y
+───────────────────────── 4 · Build ────────────────────────────────────────
+wave 1: indexes, batch-tags
+  ✓ indexes notes/db.py
+  ✓ batch-tags notes/app.py
+wave 2: perf-tests, docs
+  ✓ perf-tests tests/test_performance.py
+  ✓ docs README.md
+───────────────────────── 5 · Test & recover ───────────────────────────────
+tests: passed
+ready_for_review. Review runs/20260928-214133-make-the-notes-api-faster/summary.md and .../changes.patch
+› /exit
+```
+
+**A new project** ([full transcript](examples/sessions/greenfield-setup.txt)): enter creates a fresh directory, the session asks how to set the project up, and in suggest mode every edit is shown as a diff and approved.
+
+```
+› Build a URL shortener with click analytics
+Which directory should I work in? Enter for a new project (new)
+new project in work/project-20260928-214136
+Autonomy (1) 1
+Classified: greenfield · clear · python
+? New project: how should it be set up? Language, package manager, test framework, how tests are
+run, any tools you want or want avoided.
+  enter = python with its standard package manager and test framework
+> Python 3.12, FastAPI, Postgres, pytest
+Setup: Python 3.12, FastAPI, Postgres, pytest
+...
+execution waves: (persistence, codes) → (api, unit-tests) → (integration-tests, docs)
+Approve this plan?  y
+wave 1: persistence, codes
+--- a/shortener/codes.py
++++ b/shortener/codes.py
+@@ -0,0 +1,16 @@
++import re
++import secrets
+...
+Apply 1 file(s) for codes?  y
+  ✓ codes shortener/codes.py
+...
+tests: passed
+```
+
+**A Go codebase when Go isn't installed** ([full transcript](examples/sessions/go-missing-toolchain.txt)): the session detects Go and asks how to run the tests instead of installing anything on its own.
+
+```
+› Reject todos with an empty or overlong title
+Classified: brownfield · clear · go
+...
+go not installed. How should I run the tests?
+  1. install go from conda-forge into an isolated pixi env under work/.toolchains/ (nothing global)
+  2. run a command you give me, e.g. docker run --rm -v "$PWD":/w -w /w golang:1.22 go test ./...
+  3. skip the tests
+> 1
+go toolchain: isolated pixi env (~/Documents/experiments/agentic-swe/work/.toolchains/go)
+tests: passed
+```
+
+In suggest mode you can also answer an edit with free text instead of `y`/`n`. The coder then redoes that task with your text as review feedback. `/model` switches models mid-session; `/mode` changes the autonomy level for the next request.
+
 ## Models
 
 Any Pydantic AI model works: pass `--model <provider>:<model>` (or set `AGENTIC_SWE_MODEL`). The provider reads its own API key, so only the key for the provider you pick is needed:

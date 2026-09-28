@@ -16,5 +16,6 @@
     "The error for malformed JSON changes from plain text to JSON; clients parsing the text body would notice.",
     "Rune count vs byte length matters for non-ASCII titles; utf8.RuneCountInString keeps the limit in characters.",
     "Existing todos created before the change may violate the new rule; they are left as they are."
-  ]
+  ],
+  "test_command": ""
 }

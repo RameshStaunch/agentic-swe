@@ -1,0 +1,128 @@
+╭────────────────────────────────────────────────────╮
+│ agentic-swe  requirement in, reviewable change out │
+╰────────────────────────────────────────────────────╯
+Choose a model
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ # ┃ Model                            ┃ Key                                         ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1 │ mock                             │ offline, answers from the recorded examples │
+│ 2 │ openrouter:qwen/qwen3.8-27b:free │ OPENROUTER_API_KEY set                      │
+│ 3 │ google:gemini-flash-latest       │ GOOGLE_API_KEY set                          │
+│ 4 │ google:gemini-pro-latest         │ GOOGLE_API_KEY set                          │
+│ 5 │ anthropic:claude-sonnet-5        │ ANTHROPIC_API_KEY missing                   │
+│ 6 │ anthropic:claude-opus-5-5        │ ANTHROPIC_API_KEY missing                   │
+│ 7 │ openai:gpt-5                     │ OPENAI_API_KEY missing                      │
+│ c │ custom                           │ any Pydantic AI '<provider>:<model>'        │
+│ r │ replay                           │ recorded examples, no API calls             │
+└───┴──────────────────────────────────┴─────────────────────────────────────────────┘
+Model (2) 1
+Using mock
+
+Describe what you want built or changed, or use a command:
+  /model   switch model        /mode   switch autonomy mode
+  /repo    switch directory    /runs   recent runs
+  /help    this help           /exit   quit
+
+› Make the notes API faster
+Which directory should I work in? Enter for a new project (new) seed_repo
+seed_repo has 6 files. Work on a timestamped copy or edit in place? (copy)
+copied to work/seed_repo-20260928-214133; seed_repo is untouched
+  1. suggest  approve the plan and every edit
+  2. auto-edit  approve the plan; edits apply unless they leave a task's declared files
+  3. full-auto  no prompts; review the summary at the end
+Autonomy (1) 2
+run #25 · auto-edit · mock · runs/20260928-214133-make-the-notes-api-faster
+───────────────────────────────────── 1 · Requirement analysis ─────────────────────────────────────
+╭───────────────────────────────────── Normalized requirement ─────────────────────────────────────╮
+│ Reduce latency of the notes API, target and endpoints to be confirmed.                           │
+│                                                                                                  │
+│ • Listing notes performs a constant number of queries regardless of note count.                  │
+│ • Tag filtering does not load notes that do not match.                                           │
+│ • The API contract is unchanged and existing tests pass.                                         │
+│ • A test fails if the per-note query pattern is reintroduced.                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────── Ambiguities ───────────────────────────────────────────╮
+│ • 'Faster' does not say which endpoint: create, list, fetch and delete have very different       │
+│ costs.                                                                                           │
+│ • No target is given (latency percentile, data size), so there is no way to know when the work   │
+│ is done.                                                                                         │
+│ • It is unclear whether API changes (e.g. pagination, dropping fields) are acceptable, or only   │
+│ internal changes.                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+? Which endpoint is slow, or is it all of them?
+  enter = The list endpoint, since it is the only one whose cost grows with data size.
+> The list endpoint, it gets slow with a few thousand notes
+? What does 'fast enough' mean: a latency target at what data size?
+  enter = Constant query count for listing, regardless of how many notes exist.
+> Constant number of queries per request
+? May the API contract change, or must it stay backward compatible?
+  enter = No breaking API changes.
+> No breaking API changes
+╭───────────────────────────────────────── Clarifications ─────────────────────────────────────────╮
+│ Q: Which endpoint is slow, or is it all of them? A: The list endpoint, it gets slow with a few   │
+│ thousand notes                                                                                   │
+│ Q: What does 'fast enough' mean: a latency target at what data size? A: Constant number of       │
+│ queries per request                                                                              │
+│ Q: May the API contract change, or must it stay backward compatible? A: No breaking API changes  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────── Normalized requirement ─────────────────────────────────────╮
+│ Reduce latency of the notes API, target and endpoints to be confirmed.                           │
+│                                                                                                  │
+│ • Listing notes performs a constant number of queries regardless of note count.                  │
+│ • Tag filtering does not load notes that do not match.                                           │
+│ • The API contract is unchanged and existing tests pass.                                         │
+│ • A test fails if the per-note query pattern is reintroduced.                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+Classified: brownfield · ambiguous, clarified · python
+─────────────────────────────────── 2 · Codebase impact analysis ───────────────────────────────────
+╭───────────────────────────────────────────── Impact ─────────────────────────────────────────────╮
+│ GET /notes runs one query for the notes and then one tag query per note (_tags inside a loop):   │
+│ 1+N queries. The tag filter also runs in Python after loading every note. note_tags has no       │
+│ indexes, so each per-note lookup is a full scan of note_tags, making listing O(N x T). Fetch and │
+│ create are single-row and not the bottleneck.                                                    │
+│                                                                                                  │
+│ Files: notes/app.py, notes/db.py, README.md, tests/test_performance.py (new)                     │
+│ APIs: GET /notes (internal change only; same request and response)                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+────────────────────────────────────── 3 · Task decomposition ──────────────────────────────────────
+                                             Task graph
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Task                                 ┃ Kind    ┃ Depends on          ┃ Files                     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ indexes                              │ codegen │ -                   │ notes/db.py               │
+│ Index note_tags                      │         │                     │                           │
+│ batch-tags                           │ codegen │ -                   │ notes/app.py              │
+│ Remove N+1 in list                   │         │                     │                           │
+│ perf-tests                           │ test    │ indexes, batch-tags │ tests/test_performance.py │
+│ Query-count regression test          │         │                     │                           │
+│ docs                                 │ docs    │ batch-tags          │ README.md                 │
+│ Document performance characteristics │         │                     │                           │
+└──────────────────────────────────────┴─────────┴─────────────────────┴───────────────────────────┘
+Indexes and the query rewrite touch different files and are independent, so they run in parallel.
+The regression test needs both; docs only need the new behaviour.
+execution waves: (indexes, batch-tags) → (perf-tests, docs)
+Approve this plan?  y
+──────────────────────────────────────────── 4 · Build ─────────────────────────────────────────────
+wave 1: indexes, batch-tags
+  ✓ indexes notes/db.py
+  ✓ batch-tags notes/app.py
+wave 2: perf-tests, docs
+  ✓ perf-tests tests/test_performance.py
+  ✓ docs README.md
+──────────────────────────────────────── 5 · Test & recover ────────────────────────────────────────
+python toolchain: native (~/Documents/experiments/agentic-swe/.pixi/envs/default/bin/python3.12)
+tests: passed
+─────────────────────────────────── 6 · Validation & risk review ───────────────────────────────────
+╭─────────────────────────────────────── Validator: approve ───────────────────────────────────────╮
+│ • Very large unpaginated lists can exceed SQLite's bound-parameter limit in the IN clause.       │
+│ • Listing still returns every note; memory and payload size grow linearly.                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────────────── 7 · Summary ────────────────────────────────────────────
+ready_for_review → runs/20260928-214133-make-the-notes-api-faster/summary.md
+
+ready_for_review. Review runs/20260928-214133-make-the-notes-api-faster/summary.md and
+runs/20260928-214133-make-the-notes-api-faster/changes.patch
+
+
+› /exit
+bye
