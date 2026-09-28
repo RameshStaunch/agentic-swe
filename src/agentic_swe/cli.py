@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,14 @@ def new_run_dir(requirement: str, out: Path | None) -> Path:
         return out
     slug = re.sub(r"[^a-z0-9]+", "-", requirement.lower()).strip("-")[:40]
     return Path("runs") / f"{datetime.now():%Y%m%d-%H%M%S}-{slug}"
+
+
+def workspace(name: str, copy_from: Path | None = None) -> Path:
+    """A new timestamped directory under work/, optionally seeded with a copy of an existing codebase. Never overwrites."""
+    dest = Path("work") / f"{name}-{datetime.now():%Y%m%d-%H%M%S}"
+    if copy_from:
+        shutil.copytree(copy_from, dest, ignore=shutil.ignore_patterns("__pycache__", ".git", ".pytest_cache"))
+    return dest
 
 
 async def execute(requirement: str, repo: Path, scope: Scope | None, mode: Mode, *, ask: Ask, answers: list[str], replay: Path | None,
@@ -82,7 +91,10 @@ async def run_once(requirement: str, repo: Path, scope: Scope | None, mode: Mode
 @app.command()
 def run(
     requirement: str,
-    repo: Annotated[Path, typer.Option(help="Repository the agents work in (created if missing).")],
+    repo: Annotated[Path | None, typer.Option(help="Directory the agents work in, edited in place (created if missing). "
+                                                   "Default: a new timestamped work/project-<time>.")] = None,
+    copy_from: Annotated[Path | None, typer.Option("--from", help="Work on a timestamped copy of this codebase "
+                                                   "(work/<name>-<time>) instead of editing it in place.")] = None,
     scope: Annotated[str | None, typer.Option(help="greenfield | brownfield (default: the analyst decides from the repo)")] = None,
     mode: Annotated[str, typer.Option(help="suggest (approve every edit) | auto-edit (approve plan + out-of-scope writes) | full-auto")] = "suggest",
     answer: Annotated[list[str] | None, typer.Option(help="Pre-answer clarifying questions (repeatable).")] = None,
@@ -93,6 +105,11 @@ def run(
                                             "The provider reads its own API key from the environment / .env. Default: $AGENTIC_SWE_MODEL.")] = DEFAULT_MODEL,
 ):
     """Take a requirement through analysis, planning, build, test, validation and summary."""
+    if repo and copy_from:
+        raise typer.BadParameter("use --repo (edit in place) or --from (edit a copy), not both")
+    if copy_from and not copy_from.is_dir():
+        raise typer.BadParameter(f"--from {copy_from} is not a directory")
+    repo = workspace(copy_from.resolve().name, copy_from) if copy_from else repo or workspace("project")
     if scope not in (None, "greenfield", "brownfield") or mode not in ("suggest", "auto-edit", "full-auto"):
         raise typer.BadParameter("scope must be greenfield|brownfield; mode must be suggest|auto-edit|full-auto")
     llm = None
@@ -102,6 +119,7 @@ def run(
         except (UserError, ImportError) as e:
             raise typer.BadParameter(f"{model}: {e}  (or pass --replay <recorded run dir>)")
     console = Console(record=True)
+    console.print(f"[dim]working in {repo}[/]")
     try:
         result = asyncio.run(run_once(requirement, repo, scope, mode, model_name=model, llm=llm, replay=replay,
                                       answers=answer or [], out=out, no_db=no_db, console=console))

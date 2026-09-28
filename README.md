@@ -38,7 +38,7 @@ A missing key or unknown model fails before the run starts. Rate-limit and overl
 `--model mock` (or option 1 in the session menu) is an offline stand-in for an LLM. It answers each agent from the recorded examples, but unlike `--replay` it goes through the real Pydantic AI agent loop: output tools, schema validation and the decomposer's graph validator all run. It picks the example from words in your requirement ("faster"/"slow" → the ambiguous example, "pagination" → brownfield, anything else → the URL shortener), so use it to test the flow, not to get code that matches an arbitrary request.
 
 ```bash
-pixi run agentic-swe run "Make the notes API faster" --repo work/notes --model mock
+pixi run agentic-swe run "Make the notes API faster" --from seed_repo --model mock
 ```
 
 ## Interactive session
@@ -73,8 +73,10 @@ pixi run demo-ambiguous     # ambiguous,  auto-edit:  "make the notes API faster
 pixi run agentic-swe run "Build a scalable URL shortener service with APIs, persistence, and analytics." \
     --repo url_shortener --mode suggest --model google:gemini-flash-latest
 
-pixi run agentic-swe run "Add rate limiting to note creation" --repo work/notes --mode auto-edit   # --scope is optional; the analyst decides
+pixi run agentic-swe run "Add rate limiting to note creation" --from seed_repo --mode auto-edit
 ```
+
+**Where the agents work.** `--from <dir>` copies a codebase to a new timestamped `work/<name>-<time>/` and works on the copy, so the original is never touched and earlier attempts are kept side by side. `--repo <dir>` edits a directory in place. With neither, a new `work/project-<time>/` is created. `--scope` is optional; the analyst decides greenfield or brownfield from what is in the directory. The interactive session asks the same thing: enter for a new project, or a path, then copy (default) or in place.
 
 Every run writes `runs/<timestamp>-<slug>/` with `summary.md`, `changes.patch`, `tests.txt`, `transcript.txt` and `steps/*.json` (every agent output, which is also what `--replay` reads). Pass `--out examples/<name>` to record a new example.
 

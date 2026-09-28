@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import shutil
 from pathlib import Path
 
 from pydantic_ai.exceptions import UserError
@@ -12,7 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .agents import DEFAULT_MODEL, load_model
-from .cli import run_once
+from .cli import run_once, workspace
 from .models import Mode
 
 MODELS = [  # (pydantic-ai model string, env var its provider reads)
@@ -83,10 +82,19 @@ class Session:
         self.mode = list(MODES)[int(pick) - 1] if pick in ("1", "2", "3") else pick if pick in MODES else "suggest"  # type: ignore[assignment]
 
     def choose_repo(self) -> None:
-        path = Path(self.ask("Which directory should I work in? New or empty means a new project", str(self.repo or "work/project")))
+        answer = self.ask("Which directory should I work in? Enter for a new project", "new")
+        if answer == "new":
+            self.repo = workspace("project")
+            self.console.print(f"[dim]new project in {self.repo}[/]")
+            return
+        path = Path(answer)
         files = [p for p in path.rglob("*") if p.is_file() and "__pycache__" not in p.parts and ".git" not in p.parts] if path.exists() else []
-        self.console.print(f"[dim]{path}: {'%d existing files' % len(files) if files else 'empty, will be created'}[/]")
-        self.repo = path
+        if files and self.ask(f"{path} has {len(files)} files. Work on a timestamped [bold]copy[/] or edit [bold]in place[/]?", "copy").startswith("c"):
+            self.repo = workspace(path.resolve().name, path)
+            self.console.print(f"[dim]copied to {self.repo}; {path} is untouched[/]")
+        else:
+            self.repo = path
+            self.console.print(f"[dim]{path}: {'editing %d existing files in place' % len(files) if files else 'empty, will be created'}[/]")
 
     # ---------------------------------------------------------------- work
     def build(self, requirement: str, replay: Path | None = None) -> None:
@@ -114,10 +122,7 @@ class Session:
         pick = self.ask("Example", "1")
         name = names[int(pick) - 1] if pick in ("1", "2", "3") else names[0]
         requirement, seed = EXAMPLES[name]
-        self.repo = Path("work") / name
-        shutil.rmtree(self.repo, ignore_errors=True)
-        if seed:
-            shutil.copytree(seed, self.repo, ignore=shutil.ignore_patterns("__pycache__"))
+        self.repo = workspace(name, Path(seed) if seed else None)
         self.console.print(f"[dim]requirement:[/] {requirement}\n[dim]directory:[/] {self.repo}")
         self.build(requirement, replay=Path("examples") / name)
 
