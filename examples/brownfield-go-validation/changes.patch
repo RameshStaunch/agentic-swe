@@ -1,0 +1,137 @@
+--- a/seed_go-20260928-202009/README.md
++++ b/seed_go-20260928-202009/README.md
+@@ -2,7 +2,7 @@
+ 
+ A small in-memory todo API used as the Go brownfield target. Standard library only.
+ 
+-- `POST /todos` `{"title": "..."}` creates a todo
++- `POST /todos` `{"title": "..."}` creates a todo. The title is trimmed and must be 1 to 200 characters; otherwise the response is `400 {"error": "..."}`. Bodies over 64 KiB are rejected.
+ - `GET /todos` lists them
+ 
+ Run tests with `go test ./...`.
+--- a/seed_go-20260928-202009/todo.go
++++ b/seed_go-20260928-202009/todo.go
+@@ -3,9 +3,36 @@
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"net/http"
++	"strings"
+ 	"sync"
++	"unicode/utf8"
+ )
++
++// MaxTitleLen is the longest title accepted, in characters.
++const MaxTitleLen = 200
++
++// maxBodyBytes caps request bodies so a huge payload cannot exhaust memory.
++const maxBodyBytes = 1 << 16
++
++// ValidateTitle trims surrounding whitespace and rejects empty or overlong titles.
++func ValidateTitle(title string) (string, error) {
++	title = strings.TrimSpace(title)
++	switch {
++	case title == "":
++		return "", errors.New("title must not be empty")
++	case utf8.RuneCountInString(title) > MaxTitleLen:
++		return "", errors.New("title must be at most 200 characters")
++	}
++	return title, nil
++}
++
++func writeError(w http.ResponseWriter, status int, msg string) {
++	w.Header().Set("Content-Type", "application/json")
++	w.WriteHeader(status)
++	json.NewEncoder(w).Encode(map[string]string{"error": msg})
++}
+ 
+ type Todo struct {
+ 	ID    int    `json:"id"`
+@@ -41,13 +68,18 @@
+ 		var in struct {
+ 			Title string `json:"title"`
+ 		}
+-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+-			http.Error(w, "invalid json", http.StatusBadRequest)
++		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&in); err != nil {
++			writeError(w, http.StatusBadRequest, "invalid json")
++			return
++		}
++		title, err := ValidateTitle(in.Title)
++		if err != nil {
++			writeError(w, http.StatusBadRequest, err.Error())
+ 			return
+ 		}
+ 		w.Header().Set("Content-Type", "application/json")
+ 		w.WriteHeader(http.StatusCreated)
+-		json.NewEncoder(w).Encode(s.Add(in.Title))
++		json.NewEncoder(w).Encode(s.Add(title))
+ 	})
+ 	mux.HandleFunc("GET /todos", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Header().Set("Content-Type", "application/json")
+--- a/seed_go-20260928-202009/validate_test.go
++++ b/seed_go-20260928-202009/validate_test.go
+@@ -0,0 +1,62 @@
++package todo
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++)
++
++func TestValidateTitle(t *testing.T) {
++	cases := []struct {
++		in, want string
++		ok       bool
++	}{
++		{"buy milk", "buy milk", true},
++		{"  padded  ", "padded", true},
++		{"", "", false},
++		{"   ", "", false},
++		{strings.Repeat("a", MaxTitleLen), strings.Repeat("a", MaxTitleLen), true},
++		{strings.Repeat("a", MaxTitleLen+1), "", false},
++		{strings.Repeat("é", MaxTitleLen), strings.Repeat("é", MaxTitleLen), true}, // counts characters, not bytes
++	}
++	for _, c := range cases {
++		got, err := ValidateTitle(c.in)
++		if (err == nil) != c.ok || got != c.want {
++			t.Errorf("ValidateTitle(%q) = %q, %v; want %q, ok=%v", c.in, got, err, c.want, c.ok)
++		}
++	}
++}
++
++func TestCreateRejectsInvalidTitles(t *testing.T) {
++	store := &Store{}
++	srv := httptest.NewServer(Handler(store))
++	defer srv.Close()
++
++	for _, body := range []string{`{"title":""}`, `{"title":"   "}`, `{}`, `{"title":"` + strings.Repeat("x", MaxTitleLen+1) + `"}`, `not json`} {
++		res, err := http.Post(srv.URL+"/todos", "application/json", strings.NewReader(body))
++		if err != nil {
++			t.Fatal(err)
++		}
++		var e map[string]string
++		json.NewDecoder(res.Body).Decode(&e)
++		if res.StatusCode != http.StatusBadRequest || e["error"] == "" {
++			t.Errorf("body %.30q: got %d %v, want 400 with an error message", body, res.StatusCode, e)
++		}
++	}
++	if n := len(store.List()); n != 0 {
++		t.Fatalf("invalid requests stored %d todos", n)
++	}
++}
++
++func TestCreateStoresTrimmedTitle(t *testing.T) {
++	srv := httptest.NewServer(Handler(&Store{}))
++	defer srv.Close()
++	res, _ := http.Post(srv.URL+"/todos", "application/json", strings.NewReader(`{"title":"  ship it  "}`))
++	var got Todo
++	json.NewDecoder(res.Body).Decode(&got)
++	if res.StatusCode != http.StatusCreated || got.Title != "ship it" {
++		t.Fatalf("got %d %+v", res.StatusCode, got)
++	}
++}

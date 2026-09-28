@@ -145,8 +145,11 @@ def postgres_up() -> bool:
     ("brownfield-pagination", "Add pagination to the notes list endpoint", "brownfield", "seed_repo"),
     ("ambiguous-make-it-faster", "Make the notes API faster", "brownfield", "seed_repo"),
     ("greenfield-url-shortener", "Build a scalable URL shortener service with APIs, persistence, and analytics.", "greenfield", None),
+    ("brownfield-go-validation", "Reject todos with an empty or overlong title", "brownfield", "seed_go"),
 ])
 def test_examples_replay_to_green(tmp_path, example, requirement, scope, seed):
+    if seed == "seed_go" and not (shutil.which("go") or shutil.which("pixi")):
+        pytest.skip("needs go, or pixi to install it")
     if scope == "greenfield" and not postgres_up():
         pytest.skip("URL shortener integration tests need Postgres (pixi run db-start)")
     repo = tmp_path / "repo"
@@ -182,7 +185,7 @@ def test_mock_model_drives_the_live_agent_path(tmp_path):
 
 @pytest.mark.skipif(not shutil.which("sandbox-exec"), reason="macOS sandbox-exec only")
 def test_generated_tests_cannot_escape_the_repo(tmp_path):
-    from agentic_swe.orchestrator import run_tests
+    from agentic_swe.toolchains import resolve, run_tests
 
     outside = Path.home() / ".agentic-swe-sandbox-probe"
     (tmp_path / "test_escape.py").write_text(f'''
@@ -190,6 +193,10 @@ import socket, pathlib, pytest
 
 def test_can_write_inside_repo():
     pathlib.Path("inside.txt").write_text("ok")
+
+def test_can_serve_on_localhost():
+    with socket.create_server(("127.0.0.1", 0)) as s:
+        assert s.getsockname()[1] > 0
 
 def test_cannot_write_outside():
     with pytest.raises(PermissionError):
@@ -199,7 +206,7 @@ def test_no_internet():
     with pytest.raises(OSError):
         socket.create_connection(("1.1.1.1", 443), timeout=3)
 ''')
-    passed, out = run_tests(tmp_path)
+    passed, out = run_tests(tmp_path, resolve(tmp_path, "python", "none", never_ask))
     assert passed, out
     assert "sandbox-exec" in out and not outside.exists()
 
@@ -210,3 +217,12 @@ def test_run_python_tool_is_sandboxed():
     assert run_python("sum(range(10))").endswith("=> 45")
     assert "PermissionError" in run_python("open('/etc/passwd').read()")
     assert "No module named 'subprocess'" in run_python("import subprocess")
+
+
+def test_detects_language_from_markers(tmp_path):
+    from agentic_swe.toolchains import detect
+
+    assert detect(ROOT / "seed_repo") == "python" and detect(ROOT / "seed_go") == "go"
+    (tmp_path / "package.json").write_text("{}")
+    assert detect(tmp_path) == "node"
+    assert detect(tmp_path / "missing") is None

@@ -117,8 +117,9 @@ coder = Agent(
     output_type=CodeChange, deps_type=Repo, tools=REPO_TOOLS, name="coder", retries=2,
     instructions=(
         "You implement one task. Output the FULL content of every file you create or change, and only files the task lists. "
-        "Write production-quality, typed Python that follows the existing code's conventions. "
-        "Tests use pytest and must be runnable with `pytest` from the repository root."
+        "Write production-quality code in the language named in the prompt, following the existing code's conventions. "
+        "Tests use that language's standard tooling and must pass with the test command given in the prompt. For a new project, "
+        "include the files that command needs (e.g. package.json with a test script, go.mod)."
     ),
 )
 

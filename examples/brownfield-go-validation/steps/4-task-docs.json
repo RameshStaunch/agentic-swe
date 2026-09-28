@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "content": "# todo (Go)\n\nA small in-memory todo API used as the Go brownfield target. Standard library only.\n\n- `POST /todos` `{\"title\": \"...\"}` creates a todo. The title is trimmed and must be 1 to 200 characters; otherwise the response is `400 {\"error\": \"...\"}`. Bodies over 64 KiB are rejected.\n- `GET /todos` lists them\n\nRun tests with `go test ./...`.\n"
+    }
+  ],
+  "notes": "One line on the contract."
+}

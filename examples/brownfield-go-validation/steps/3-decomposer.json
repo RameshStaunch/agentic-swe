@@ -1,0 +1,39 @@
+{
+  "rationale": "One handler change carries the behaviour; tests and docs both depend on its final contract and can run in parallel after it.",
+  "tasks": [
+    {
+      "id": "validate-title",
+      "title": "Validate titles in POST /todos",
+      "kind": "codegen",
+      "description": "Add ValidateTitle (trim, non-empty, <= 200 runes), JSON error responses, and a body size cap.",
+      "depends_on": [],
+      "files": [
+        "todo.go"
+      ]
+    },
+    {
+      "id": "validation-tests",
+      "title": "Validation tests",
+      "kind": "test",
+      "description": "Table test for ValidateTitle including the multi-byte boundary; HTTP tests for every rejected input and trimming.",
+      "depends_on": [
+        "validate-title"
+      ],
+      "files": [
+        "validate_test.go"
+      ]
+    },
+    {
+      "id": "docs",
+      "title": "Document the title rules",
+      "kind": "docs",
+      "description": "README line on the new 400 responses.",
+      "depends_on": [
+        "validate-title"
+      ],
+      "files": [
+        "README.md"
+      ]
+    }
+  ]
+}

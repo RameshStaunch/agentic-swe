@@ -27,6 +27,7 @@ EXAMPLES = {  # name -> (requirement, seed repo copied into work/ before replay)
     "greenfield-url-shortener": ("Build a scalable URL shortener service with APIs, persistence, and analytics.", None),
     "brownfield-pagination": ("Add pagination to the notes list endpoint", "seed_repo"),
     "ambiguous-make-it-faster": ("Make the notes API faster", "seed_repo"),
+    "brownfield-go-validation": ("Reject todos with an empty or overlong title", "seed_go"),
 }
 MODES: dict[str, str] = {
     "suggest": "approve the plan and every edit",
@@ -120,7 +121,7 @@ class Session:
         for i, n in enumerate(names, 1):
             self.console.print(f"  {i}. [bold]{n}[/]  {EXAMPLES[n][0]}")
         pick = self.ask("Example", "1")
-        name = names[int(pick) - 1] if pick in ("1", "2", "3") else names[0]
+        name = names[int(pick) - 1] if pick.isdigit() and 0 < int(pick) <= len(names) else names[0]
         requirement, seed = EXAMPLES[name]
         self.repo = workspace(name, Path(seed) if seed else None)
         self.console.print(f"[dim]requirement:[/] {requirement}\n[dim]directory:[/] {self.repo}")

@@ -1,0 +1,17 @@
+{
+  "plan": "Added title validation to POST /todos (trim, 1-200 characters, JSON 400 errors, 64 KiB body cap), then tests and docs in parallel.",
+  "rationale": "Impact analysis showed the handler passed input straight to the store with an unbounded body read, so validation and the size cap went in the handler as a pure, testable function.",
+  "risks": [
+    "Error body format change for malformed JSON."
+  ],
+  "trade_offs": [
+    "Trimmed titles are stored.",
+    "Limit is a constant."
+  ],
+  "assumptions": [
+    "200 characters is an acceptable limit."
+  ],
+  "limitations": [
+    "Existing invalid todos are not migrated."
+  ]
+}

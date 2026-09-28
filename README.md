@@ -54,7 +54,19 @@ Any Pydantic AI model works: pass `--model <provider>:<model>` (or set `AGENTIC_
 
 A missing key or unknown model fails before the run starts. Rate-limit and overload errors (429/5xx) are retried with backoff and then reported in one line.
 
-**`mock`** is an offline stand-in for an LLM, for testing. It answers each agent from the recorded examples, but unlike `--replay` it goes through the real Pydantic AI agent loop: output tools, schema validation and the decomposer's graph validator all run. It picks the example from words in your requirement ("faster"/"slow" → the ambiguous example, "pagination" → brownfield, anything else → the URL shortener), so it exercises the flow; it does not write code for arbitrary requests.
+**`mock`** is an offline stand-in for an LLM, for testing. It answers each agent from the recorded examples, but unlike `--replay` it goes through the real Pydantic AI agent loop: output tools, schema validation and the decomposer's graph validator all run. It picks the example from words in your requirement ("faster"/"slow" → the ambiguous example, "pagination" → brownfield, "todo"/"title" → the Go example, anything else → the URL shortener), so it exercises the flow; it does not write code for arbitrary requests.
+
+## Languages and toolchains
+
+The target codebase does not have to be Python. The language comes from the repository's marker files (`pyproject.toml`/`conftest.py`, `package.json`, `go.mod`) or, for a new project, from the analyst's structured `language` field. Each language has a test command (`pytest`, `npm test`, `go test ./...`) that the coder is told to satisfy and the orchestrator runs.
+
+Where the toolchain comes from, in order:
+
+1. **The repo's own `pixi.toml`**, if it has one: the repo chose pixi, so its environment is installed and used.
+2. **Binaries already installed** on the machine (`node`/`npm`, `go`, ...), used as they are.
+3. **Otherwise you choose** (`--install`, or a prompt in suggest/auto-edit mode): `isolated` installs the toolchain from conda-forge into a pixi env under `work/.toolchains/<language>/`, touching nothing else; `global` runs `pixi global install`; `none` skips the tests. Full-auto defaults to `isolated`.
+
+Dependencies (`npm install`, `go mod download`) are fetched before the tests, outside the sandbox; the tests themselves run sandboxed. Python, Node and Go are supported; each language is one row in `toolchains.py`.
 
 ## Scripted runs
 
@@ -62,6 +74,7 @@ A missing key or unknown model fails before the run starts. Rate-limit and overl
 pixi run agentic-swe run "Add rate limiting to note creation" --from seed_repo --mode auto-edit
 pixi run agentic-swe run "Make the notes API faster" --from seed_repo --model mock
 pixi run agentic-swe run "Build a scalable URL shortener service with APIs, persistence, and analytics." --mode full-auto
+pixi run agentic-swe run "Reject todos with an empty or overlong title" --from seed_go --install isolated
 ```
 
 **Where the agents work:**
@@ -86,6 +99,7 @@ Each demo replays a recorded run on a fresh timestamped copy: the agent outputs 
 pixi run demo-shortener     # greenfield, full-auto:  URL shortener in a new work/project-<time>/
 pixi run demo-brownfield    # brownfield, suggest:    pagination on a copy of the seed notes service (approve each edit)
 pixi run demo-ambiguous     # ambiguous,  auto-edit:  "make the notes API faster" (asks 3 questions first)
+pixi run demo-go            # Go brownfield, suggest: title validation on the Go todo service (installs Go if missing)
 ```
 
 | Example | What it shows | Output |
@@ -93,6 +107,7 @@ pixi run demo-ambiguous     # ambiguous,  auto-edit:  "make the notes API faster
 | Greenfield | Architecture + API contract, 6 tasks in 3 parallel waves, 11 unit/integration tests on Postgres | [summary](examples/greenfield-url-shortener/summary.md) · [transcript](examples/greenfield-url-shortener/transcript.txt) · [code](url_shortener/) |
 | Brownfield | Impact analysis finds that the tag filter runs in Python, so naive paging would be wrong; fixes both | [summary](examples/brownfield-pagination/summary.md) · [transcript](examples/brownfield-pagination/transcript.txt) · [diff](examples/brownfield-pagination/changes.patch) |
 | Ambiguous | Detects 3 ambiguities, pauses for answers, then fixes an N+1 with a query-count regression test | [summary](examples/ambiguous-make-it-faster/summary.md) · [transcript](examples/ambiguous-make-it-faster/transcript.txt) · [diff](examples/ambiguous-make-it-faster/changes.patch) |
+| Go brownfield | Detects Go, gets a toolchain (here: isolated pixi env, since Go isn't installed), adds title validation with table tests | [summary](examples/brownfield-go-validation/summary.md) · [transcript](examples/brownfield-go-validation/transcript.txt) · [diff](examples/brownfield-go-validation/changes.patch) |
 
 > **How the recordings were made:** the agent outputs in `examples/*/steps/` were written by hand in the exact typed schemas the agents return. They are a faithful stand-in for model output, not a captured model run. Run the same requirement with a live `--model` and `--out examples/<name>` to record a live one.
 
@@ -106,7 +121,7 @@ Like Claude Code and Codex, you choose how much the agents do on their own:
 | `auto-edit` | yes | yes | no | ask |
 | `full-auto` | no, uses stated assumptions | no | no | rejected |
 
-In every mode: generated tests run sandboxed (on macOS, `sandbox-exec` limits them to the working directory and localhost) and in the repo's own pixi environment if it has a `pixi.toml`; code the agents execute runs in the [Monty](https://github.com/pydantic/monty) sandbox; the agents' read tools and all writes are confined to the working directory, `.git`/`.env`/`.pixi` are never written, each task may only write the files the plan declared for it, failing tests trigger up to 2 automatic fix attempts, and anything still failing escalates to the human (or is flagged `needs_review` in full-auto).
+In every mode: generated tests run sandboxed (on macOS, `sandbox-exec` limits writes to the working directory, a scratch dir and the toolchain cache, and network to localhost) with the toolchain chosen as above; code the agents execute runs in the [Monty](https://github.com/pydantic/monty) sandbox; the agents' read tools and all writes are confined to the working directory, `.git`/`.env`/`.pixi` are never written, each task may only write the files the plan declared for it, failing tests trigger up to 2 automatic fix attempts, and anything still failing escalates to the human (or is flagged `needs_review` in full-auto).
 
 ## HTTP API
 
@@ -136,14 +151,16 @@ src/agentic_swe/
   agents.py        the seven agents, their repo tools (list/read/grep), and model loading
   mock.py          offline mock model
   orchestrator.py  pipeline, DAG waves, approval gate, test/fix loop, record/replay, summary rendering
+  toolchains.py    language detection, toolchain resolution (repo pixi / native / isolated / global), sandboxed test runs
   db.py            Postgres audit trail (runs, events)
   cli.py           scripted commands (run, runs, show) and working-directory handling
   session.py       interactive session
   api.py           HTTP API
-seed_repo/         pre-existing notes service (brownfield target; runs work on copies)
+seed_repo/         pre-existing Python notes service (brownfield target; runs work on copies)
+seed_go/           pre-existing Go todo service (Go brownfield target)
 url_shortener/     output of the greenfield example
-examples/          the three recorded runs
-work/, runs/       per-run working copies and outputs (gitignored)
+examples/          the four recorded runs
+work/, runs/       per-run working copies, isolated toolchains (work/.toolchains) and outputs (gitignored)
 ```
 
 ## Repo tooling

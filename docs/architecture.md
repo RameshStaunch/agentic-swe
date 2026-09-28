@@ -37,6 +37,7 @@ flowchart LR
 | Audit trail | `db.py` | Postgres `runs` and append-only `events` (requirement, plan, each task start/done/error, every gate decision, test runs, fix attempts, validation). |
 | Model selection | `agents.py: load_model` | Agents are model-agnostic; the model is chosen per run from a Pydantic AI `<provider>:<model>` string, and the provider resolves its own API key. |
 | Mock model | `mock.py` | A `FunctionModel` that answers each agent from the recorded examples through the real agent loop, for offline testing. |
+| Toolchains | `toolchains.py` | Detects the repo's language, resolves a toolchain (repo `pixi.toml` → native binaries → user's choice of an isolated pixi env or a global install), fetches dependencies, and runs the language's test command in the sandbox. |
 | Working directories | `cli.py: workspace` | `--from` copies a codebase to a timestamped `work/<name>-<time>/`; `--repo` edits in place; neither creates `work/project-<time>/`. Nothing is ever deleted. |
 | Front ends | `session.py`, `cli.py`, `api.py` | Interactive session (model menu, conversational intake, slash commands), scripted CLI, and FastAPI (full-auto, for automation). All call the same `execute()`. |
 
@@ -62,15 +63,16 @@ flowchart LR
 
 ## Sandboxing and environments
 
-- **Generated tests run sandboxed.** On macOS the test suite runs under `sandbox-exec`: it can write only inside the working directory and a per-run scratch directory, and can reach only localhost (so integration tests can use the local Postgres). Nothing else on disk or on the network is reachable. Set `AGENTIC_SWE_SANDBOX=0` to disable it. `tests.txt` starts with a line saying which sandbox and environment were used.
-- **Each target repo can bring its own environment.** If the working directory has a `pixi.toml`, its environment is installed and the tests run with its Python and packages; otherwise they run in the orchestrator's environment.
+- **Generated tests run sandboxed.** On macOS the test command runs under `sandbox-exec`: it can write only inside the working directory, a per-run scratch directory and the toolchain cache, and can reach only localhost (so tests can start local servers and use the local Postgres). Nothing else on disk or on the network is reachable. Set `AGENTIC_SWE_SANDBOX=0` to disable it. `tests.txt` starts with a line naming the language, test command, toolchain and sandbox.
+- **Toolchains are not assumed.** A repo's own `pixi.toml` is used if present; otherwise binaries already on the machine are used; only when they are missing does the user choose an isolated pixi env (under `work/.toolchains/`), a global `pixi global install`, or skipping the tests. Pixi is how missing toolchains get installed, not a requirement on the target repo.
 - **Code the agents execute runs in Monty.** The Codebase Reasoner and Coder have a `run_python` tool for checking a regex, an algorithm or a calculation. It runs in [pydantic-monty](https://github.com/pydantic/monty), a sandboxed interpreter with no filesystem, network or third-party imports, a 5 s time limit and a 64 MB memory cap. Monty is not used for the test suites because it cannot import pytest, sqlite3 or packages like FastAPI.
 
 ## Limitations
 
 - The coder sees whole files, so very large files are truncated at 20k characters in prompts.
 - The test sandbox is macOS only (`sandbox-exec`). On Linux, tests run unsandboxed; bubblewrap or a container is the upgrade path.
-- A target repo's `pixi install` runs outside the sandbox because it needs the network, so the packages a generated `pixi.toml` declares are trusted at install time.
+- Dependency installation (`pixi install`, `npm install`, `go mod download`) runs outside the sandbox because it needs the network, so the packages a generated manifest declares are trusted at install time.
+- Python, Node and Go have toolchains; Rust, Java and others need one row each in `toolchains.py` plus an example to prove them.
 - The API only supports full-auto; interactive approvals over HTTP would need a pending-approvals endpoint.
 - Recorded examples were hand-authored in the agents' output schemas rather than captured from a model.
-- The mock model answers from three recorded scenarios, so it tests the flow, not arbitrary requirements.
+- The mock model answers from the four recorded scenarios, so it tests the flow, not arbitrary requirements.

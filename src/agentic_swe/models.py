@@ -10,6 +10,8 @@ TaskKind = Literal["design", "codegen", "test", "docs"]
 class NormalizedRequirement(BaseModel):
     intent: str = Field(description="One-sentence restatement of what the user actually wants.")
     scope: Scope
+    language: str = Field("python", description="Implementation language: the existing codebase's, or for a new project the one the "
+                                                "requirement names or implies (python, typescript, go, ...). Default python.")
     ambiguities: list[str] = Field(description="Things that could reasonably be interpreted more than one way. Empty if none.")
     clarifying_questions: list[str] = Field(description="One question per ambiguity, answerable in a sentence.")
     assumptions: list[str] = Field(description="Defaults you would pick if nobody answers.")

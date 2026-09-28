@@ -23,8 +23,10 @@ from rich.table import Table
 
 from . import agents
 from .agents import Repo
+from .toolchains import TOOLCHAINS, Install, Resolved, Toolchain, detect, resolve, run_tests
 from .models import CodeChange, DesignDoc, EngineeringSummary, FileWrite, ImpactAnalysis, Mode, NormalizedRequirement, Scope, Task, TaskGraph, ValidationReport
 
+LANGUAGE_ALIASES = {"typescript": "node", "javascript": "node", "ts": "node", "js": "node", "nodejs": "node", "golang": "go"}
 MAX_FIX_ATTEMPTS = 2
 MAX_REDO = 2
 PROTECTED = {".git", ".env", ".pixi"}
@@ -93,8 +95,8 @@ def _check_graph(graph: TaskGraph) -> TaskGraph:
 class Gate:
     """The single place autonomy is enforced. Every side effect asks the gate first."""
 
-    def __init__(self, mode: Mode, ask: Ask, console: Console, answers: list[str] | None = None):
-        self.mode, self.ask, self.console, self.answers = mode, ask, console, answers or []
+    def __init__(self, mode: Mode, ask: Ask, console: Console, answers: list[str] | None = None, install: Install = "ask"):
+        self.mode, self.ask, self.console, self.answers, self.install = mode, ask, console, answers or [], install
         self._lock = asyncio.Lock()
 
     async def _prompt(self, question: str) -> str:
@@ -144,6 +146,15 @@ class Gate:
             return [], None
         return [], ans
 
+    def choose_install(self, tc: Toolchain) -> Install:
+        """Called when a toolchain is missing. Blocking: runs in a worker thread."""
+        if self.mode == "full-auto":
+            return "isolated"
+        ans = self.ask(f"[yellow]{', '.join(tc.binaries)} not installed.[/] Install {' '.join(tc.packages)} from conda-forge into\n"
+                       f"  1. an isolated pixi env under work/.toolchains/ (default)\n  2. your global environment (pixi global install)\n"
+                       f"  3. skip, don't run the tests\n> ").strip()
+        return {"2": "global", "3": "none"}.get(ans, "isolated")
+
     async def escalate(self, message: str) -> bool:
         """Something failed past automatic recovery. Returns True to keep going."""
         self.console.print(f"[bold red]Escalation:[/] {message}")
@@ -155,62 +166,6 @@ class Gate:
 def _diff(path: Path, new: str, label: str) -> str:
     old = path.read_text() if path.exists() else ""
     return "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True), f"a/{label}", f"b/{label}"))
-
-
-# macOS seatbelt profile: generated code may only write inside its repo and a scratch dir, and only reach localhost (test DBs).
-SANDBOX_PROFILE = """(version 1)
-(allow default)
-(deny network*)
-(allow network* (remote ip "localhost:*") (remote unix-socket))
-(deny file-write*)
-(allow file-write* (subpath "{repo}") (subpath "{scratch}") (literal "/dev/null") (literal "/dev/tty") (subpath "/dev/fd"))
-"""
-
-
-def test_python(repo: Path) -> tuple[str, str]:
-    """The repo's own pixi environment when it declares one, else the orchestrator's. Returns (python, description)."""
-    if (repo / "pixi.toml").exists() and shutil.which("pixi"):
-        # Installed outside the sandbox (it needs the network); only the tests run sandboxed.
-        r = subprocess.run(["pixi", "install", "--manifest-path", str(repo / "pixi.toml")], capture_output=True, text=True, timeout=900)
-        py = repo / ".pixi" / "envs" / "default" / "bin" / "python"
-        if r.returncode == 0 and py.exists():
-            return str(py), "repo's own pixi env"
-        return sys.executable, "orchestrator env (repo pixi install failed: " + (r.stderr.strip().splitlines() or ["?"])[-1] + ")"
-    return sys.executable, "orchestrator env"
-
-
-def sandboxed(cmd: list[str], repo: Path, scratch: str) -> tuple[list[str], str]:
-    if os.environ.get("AGENTIC_SWE_SANDBOX", "1") == "0":
-        return cmd, "none (AGENTIC_SWE_SANDBOX=0)"
-    if shutil.which("sandbox-exec"):
-        profile = SANDBOX_PROFILE.format(repo=repo.resolve(), scratch=Path(scratch).resolve())
-        return ["sandbox-exec", "-p", profile, *cmd], "sandbox-exec: writes limited to repo + scratch, network localhost only"
-    # ponytail: no sandbox off macOS yet; bubblewrap (Linux) or a container is the upgrade path
-    return cmd, "none (sandbox-exec unavailable on this OS)"
-
-
-def run_tests(repo: Path) -> tuple[bool, str]:
-    errors = []
-    for p in repo.rglob("*.py"):
-        try:
-            compile(p.read_text(), str(p), "exec")
-        except SyntaxError as e:
-            errors.append(f"{p.relative_to(repo)}:{e.lineno}: {e.msg}")
-    if errors:
-        return False, "syntax errors:\n" + "\n".join(errors)
-    python, env_desc = test_python(repo)
-    # Fresh scratch dir per run, used for bytecode (a same-size edit within the same second would otherwise reuse stale .pyc
-    # files) and as TMPDIR, so the sandbox only needs to allow writes to the repo and this directory.
-    with tempfile.TemporaryDirectory() as scratch:
-        cmd, sandbox_desc = sandboxed([python, "-m", "pytest", "-q", "-p", "no:cacheprovider"], repo, scratch)
-        try:
-            r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=600,
-                               env={**os.environ, "PYTHONPYCACHEPREFIX": scratch, "TMPDIR": scratch})
-        except subprocess.TimeoutExpired:
-            return False, "pytest timed out after 600s"
-    header = f"[env: {env_desc}] [sandbox: {sandbox_desc}]\n"
-    out = header + (r.stdout + r.stderr)[-8000:]
-    return r.returncode == 0, out if r.returncode != 5 else "no tests collected\n" + out
 
 
 class Steps:
@@ -297,13 +252,16 @@ class Orchestrator:
             req = await self.steps.call(step, agents.analyst, prompt + "\n\nAnswers so far:\n" + "\n".join(clarifications)
                                         + "\nOnly list ambiguities that are still open after these answers.")
         self.scope = self.scope or req.scope
+        self.language = detect(self.repo) or LANGUAGE_ALIASES.get(req.language.lower(), req.language.lower())
         res.requirement = req
         await self.record("requirement", req.model_dump())
-        c.print(f"[bold]Classified:[/] {self.scope} · {'ambiguous, clarified' if clarifications else 'clear'}")
+        c.print(f"[bold]Classified:[/] {self.scope} · {'ambiguous, clarified' if clarifications else 'clear'} · {self.language}")
 
         # 2. Understand the system (design for greenfield, impact analysis for brownfield)
         context: DesignDoc | ImpactAnalysis
-        brief = f"Requirement:\n{dump(req)}\nClarifications:\n" + "\n".join(clarifications or ["none"])
+        tc = TOOLCHAINS.get(self.language)
+        tooling = f"Language: {self.language}." + (f" Tests must pass with `{' '.join(tc.test)}` run from the repository root." if tc else "")
+        brief = f"{tooling}\nRequirement:\n{dump(req)}\nClarifications:\n" + "\n".join(clarifications or ["none"])
         if self.scope == "greenfield":
             c.rule("[bold]2 · Architecture")
             context = await self.steps.call("2-architect", agents.architect, brief)
@@ -321,7 +279,7 @@ class Orchestrator:
 
         # 3. Plan
         c.rule("[bold]3 · Task decomposition")
-        existing = "\n".join(sorted(str(p.relative_to(self.repo)) for p in self.repo.rglob("*.py") if "__pycache__" not in p.parts)) or "(empty repository)"
+        existing = snapshot
         graph = await self.steps.call("3-decomposer", agents.decomposer, f"{brief}\n\nSystem context:\n{dump(context)}\n\nExisting files:\n{existing}")
         res.graph = graph
         await self.record("plan", graph.model_dump())
@@ -341,7 +299,10 @@ class Orchestrator:
 
         # 5. Test, and feed failures back as fix tasks
         c.rule("[bold]5 · Test & recover")
-        passed, output = run_tests(self.repo)
+        toolchain = await asyncio.to_thread(resolve, self.repo, self.language, self.gate.install, self.gate.choose_install)
+        await self.record("toolchain", {"language": self.language, "resolved": toolchain.how if isinstance(toolchain, Resolved) else toolchain})
+        c.print(f"[dim]{self.language} toolchain: {toolchain.how if isinstance(toolchain, Resolved) else toolchain}[/]")
+        passed, output = run_tests(self.repo, toolchain)
         for attempt in range(1, MAX_FIX_ATTEMPTS + 1):
             await self.record("tests", {"attempt": attempt - 1, "passed": passed, "output": output[-3000:]})
             c.print(f"tests: {'[green]passed' if passed else '[red]failed'}[/]")
@@ -349,7 +310,7 @@ class Orchestrator:
                 break
             c.print(Panel(output[-1500:], title=f"failure → fix attempt {attempt}", border_style="red"))
             await self._fix(attempt, output, graph, brief)
-            passed, output = run_tests(self.repo)
+            passed, output = run_tests(self.repo, toolchain)
         else:
             await self.record("tests", {"attempt": MAX_FIX_ATTEMPTS, "passed": passed, "output": output[-3000:]})
             c.print(f"tests: {'[green]passed' if passed else '[red]failed'}[/]")

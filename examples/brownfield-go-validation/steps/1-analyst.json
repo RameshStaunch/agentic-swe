@@ -1,0 +1,19 @@
+{
+  "intent": "Make POST /todos reject titles that are empty (after trimming whitespace) or longer than a sensible limit, with a clear 400 error, instead of storing them.",
+  "scope": "brownfield",
+  "language": "go",
+  "ambiguities": [],
+  "clarifying_questions": [],
+  "assumptions": [
+    "Maximum title length is 200 characters, counted as characters rather than bytes.",
+    "Leading and trailing whitespace is trimmed and the trimmed title is stored.",
+    "Errors are returned as JSON {\"error\": \"...\"}, so clients get a machine-readable message."
+  ],
+  "acceptance_criteria": [
+    "Empty and whitespace-only titles return 400 and store nothing.",
+    "Titles over 200 characters return 400; exactly 200 is accepted, including multi-byte characters.",
+    "Valid titles are stored trimmed and return 201 as before.",
+    "Malformed JSON still returns 400, now with a JSON error body.",
+    "go test ./... passes, including the existing test."
+  ]
+}

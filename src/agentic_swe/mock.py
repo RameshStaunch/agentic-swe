@@ -22,6 +22,7 @@ ROLES = {  # a phrase from each agent's instructions -> recorded step name
 KEYWORDS = [  # requirement words -> the recorded example the mock answers from
     (("faster", "slow", "perf", "latency", "speed"), "ambiguous-make-it-faster"),
     (("paginat", "page", "cursor"), "brownfield-pagination"),
+    (("todo", "title"), "brownfield-go-validation"),
 ]
 DEFAULT_EXAMPLE = "greenfield-url-shortener"
 

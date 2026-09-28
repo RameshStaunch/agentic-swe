@@ -1,0 +1,18 @@
+{
+  "recommendation": "approve",
+  "risks": [
+    "Malformed-JSON errors change from plain text to a JSON body.",
+    "Previously accepted blank titles are now rejected; any client sending them will start seeing 400s."
+  ],
+  "trade_offs": [
+    "Trim-and-store rather than rejecting padded titles: friendlier, but the stored value differs from what was sent.",
+    "Fixed 200-character limit in code rather than configuration: simpler, but changing it needs a deploy."
+  ],
+  "failure_scenarios": [
+    "A client sends a 1 MB body: MaxBytesReader stops decoding at 64 KiB and returns 400 instead of buffering it."
+  ],
+  "guardrails": [
+    "ValidateTitle is table-tested at the boundary, including multi-byte characters.",
+    "HTTP tests assert rejected requests store nothing."
+  ]
+}

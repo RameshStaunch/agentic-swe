@@ -1,0 +1,20 @@
+{
+  "summary": "The service is one package: todo.go holds the Store and an http.ServeMux with POST /todos and GET /todos. POST decodes the body and passes the title straight to Store.Add with no checks, and the decoder reads an unbounded body. Validation belongs in the handler, as a pure function that is easy to unit test; the Store and GET /todos are unaffected.",
+  "impacted_files": [
+    "todo.go",
+    "validate_test.go (new)",
+    "README.md"
+  ],
+  "impacted_apis": [
+    "POST /todos: new 400 responses with a JSON error body; titles are trimmed before storing"
+  ],
+  "data_flow_changes": [
+    "Request body is capped with http.MaxBytesReader before decoding.",
+    "Title is trimmed and validated before Store.Add."
+  ],
+  "risk_notes": [
+    "The error for malformed JSON changes from plain text to JSON; clients parsing the text body would notice.",
+    "Rune count vs byte length matters for non-ASCII titles; utf8.RuneCountInString keeps the limit in characters.",
+    "Existing todos created before the change may violate the new rule; they are left as they are."
+  ]
+}
