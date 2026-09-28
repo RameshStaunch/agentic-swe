@@ -1,0 +1,46 @@
+{
+  "components": [
+    "FastAPI app (stateless): link creation, redirect, stats endpoints",
+    "Code generator: 7-char random base62 codes from `secrets`, alias validation",
+    "Postgres: `links` and `clicks` tables, accessed via SQLAlchemy async + asyncpg",
+    "Click recorder: FastAPI background task that inserts after the redirect is sent"
+  ],
+  "api_contract": [
+    {
+      "method": "POST",
+      "path": "/links",
+      "request": "{\"url\": str, \"alias\"?: str, \"expires_at\"?: datetime}",
+      "response": "201 {code, short_url, target_url, expires_at} | 409 alias taken | 422 invalid",
+      "notes": ""
+    },
+    {
+      "method": "GET",
+      "path": "/{code}",
+      "request": "-",
+      "response": "307 Location: target | 404 | 410 expired",
+      "notes": ""
+    },
+    {
+      "method": "GET",
+      "path": "/links/{code}/stats",
+      "request": "-",
+      "response": "200 {code, target_url, total_clicks, clicks_by_day[{day, clicks}], top_referrers[[referrer, n]]} | 404",
+      "notes": ""
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "request": "-",
+      "response": "200 {\"ok\": true}",
+      "notes": ""
+    }
+  ],
+  "data_model": "CREATE TABLE links (\n  id BIGSERIAL PRIMARY KEY,\n  code VARCHAR(32) NOT NULL UNIQUE,\n  target_url TEXT NOT NULL,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  expires_at TIMESTAMPTZ\n);\nCREATE TABLE clicks (\n  id BIGSERIAL PRIMARY KEY,\n  link_id BIGINT NOT NULL REFERENCES links(id) ON DELETE CASCADE,\n  at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  referrer TEXT,\n  user_agent TEXT\n);\nCREATE INDEX ix_clicks_link_at ON clicks (link_id, at);",
+  "key_decisions": [
+    "Random base62 codes instead of encoding the row id: not enumerable, no coordination between app instances; costs a unique-index check and a rare retry on collision.",
+    "307 instead of 301 redirects: every click reaches the server so analytics are complete; costs an extra round trip for repeat visitors.",
+    "Clicks inserted in a background task after the response: redirect latency is one indexed read; a crash can lose an in-flight click. A queue is the upgrade path at high volume.",
+    "Raw click rows rather than pre-aggregated counters: flexible queries and no hot-row contention; stats queries get slower as history grows, so partition `clicks` by time later.",
+    "Postgres uniqueness is the source of truth for codes, so correctness holds with any number of app instances."
+  ]
+}

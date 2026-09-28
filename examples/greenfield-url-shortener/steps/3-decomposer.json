@@ -1,0 +1,76 @@
+{
+  "rationale": "Persistence and code generation have no dependency on each other, so they are built in parallel; the API composes both. Unit tests only need the code generator, so they start as soon as it lands; integration tests and docs wait for the API.",
+  "tasks": [
+    {
+      "id": "persistence",
+      "title": "Postgres schema and engine",
+      "kind": "codegen",
+      "description": "SQLAlchemy models for links and clicks (with the (link_id, at) index), engine factory reading SHORTENER_DATABASE_URL, schema creation.",
+      "depends_on": [],
+      "files": [
+        "shortener/__init__.py",
+        "shortener/db.py"
+      ]
+    },
+    {
+      "id": "codes",
+      "title": "Short code generation",
+      "kind": "codegen",
+      "description": "Random base62 code generator and custom-alias validation with reserved words.",
+      "depends_on": [],
+      "files": [
+        "shortener/codes.py"
+      ]
+    },
+    {
+      "id": "api",
+      "title": "HTTP API",
+      "kind": "codegen",
+      "description": "POST /links with collision retry and alias conflicts, GET /{code} redirect with expiry and background click recording, GET /links/{code}/stats, /healthz.",
+      "depends_on": [
+        "persistence",
+        "codes"
+      ],
+      "files": [
+        "shortener/app.py"
+      ]
+    },
+    {
+      "id": "unit-tests",
+      "title": "Unit tests for code generation",
+      "kind": "test",
+      "description": "Code shape, distinctness over 10k draws, alias validation edge cases.",
+      "depends_on": [
+        "codes"
+      ],
+      "files": [
+        "tests/test_codes.py"
+      ]
+    },
+    {
+      "id": "integration-tests",
+      "title": "API integration tests on Postgres",
+      "kind": "test",
+      "description": "End-to-end create/redirect, 404/410/409/422 paths, click analytics, against a real Postgres.",
+      "depends_on": [
+        "api"
+      ],
+      "files": [
+        "conftest.py",
+        "tests/test_api.py"
+      ]
+    },
+    {
+      "id": "docs",
+      "title": "Service README",
+      "kind": "docs",
+      "description": "API reference, data model, design trade-offs and scaling path, how to run.",
+      "depends_on": [
+        "api"
+      ],
+      "files": [
+        "README.md"
+      ]
+    }
+  ]
+}

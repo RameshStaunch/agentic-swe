@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "shortener/codes.py",
+      "content": "import re\nimport secrets\nimport string\n\nALPHABET = string.ascii_letters + string.digits\nCODE_LENGTH = 7  # 62^7 ≈ 3.5e12 codes; collision odds stay negligible well past a billion links\nALIAS_RE = re.compile(r\"^[A-Za-z0-9_-]{3,32}$\")\nRESERVED = {\"links\", \"healthz\", \"docs\", \"openapi.json\", \"redoc\"}\n\n\ndef new_code(length: int = CODE_LENGTH) -> str:\n    return \"\".join(secrets.choice(ALPHABET) for _ in range(length))\n\n\ndef valid_alias(alias: str) -> bool:\n    return bool(ALIAS_RE.fullmatch(alias)) and alias.lower() not in RESERVED\n"
+    }
+  ],
+  "notes": "Uses `secrets` so codes are unpredictable. Reserved aliases shadow real routes."
+}

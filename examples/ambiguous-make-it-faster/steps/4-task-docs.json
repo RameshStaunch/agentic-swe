@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "content": "# notes\n\nA small, pre-existing notes service used as the brownfield target. FastAPI + stdlib sqlite3.\n\n- `POST /notes` create a note with tags\n- `GET /notes?tag=` list notes, optionally filtered by tag\n- `GET /notes/{id}` fetch one\n- `DELETE /notes/{id}` delete one\n\n## Performance\n\nListing notes runs a constant number of queries regardless of how many notes are returned: tags are loaded in one batched query and the tag filter runs in SQL. `note_tags` is indexed on `note_id` and `tag`. `tests/test_performance.py` fails if the per-note query pattern (N+1) comes back.\n\nRun tests with `pytest` from this directory.\n"
+    }
+  ],
+  "notes": "Short section so the next person knows the invariant exists."
+}

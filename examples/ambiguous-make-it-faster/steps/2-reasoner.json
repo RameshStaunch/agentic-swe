@@ -1,0 +1,22 @@
+{
+  "summary": "GET /notes runs one query for the notes and then one tag query per note (_tags inside a loop): 1+N queries. The tag filter also runs in Python after loading every note. note_tags has no indexes, so each per-note lookup is a full scan of note_tags, making listing O(N x T). Fetch and create are single-row and not the bottleneck.",
+  "impacted_files": [
+    "notes/app.py",
+    "notes/db.py",
+    "README.md",
+    "tests/test_performance.py (new)"
+  ],
+  "impacted_apis": [
+    "GET /notes (internal change only; same request and response)"
+  ],
+  "data_flow_changes": [
+    "Tags for a page of notes are loaded in one IN (...) query and grouped in memory.",
+    "Tag filtering moves into SQL via a subquery on note_tags.",
+    "New indexes on note_tags(note_id) and note_tags(tag)."
+  ],
+  "risk_notes": [
+    "SQLite limits bound parameters per statement (32766 on modern builds); an IN list over every note could hit it with a very large table. Pagination is the long-term fix, but was ruled out by 'no API changes'.",
+    "Tag order must stay insertion order, which the per-note query implicitly returned.",
+    "Indexes are added with IF NOT EXISTS, so existing databases pick them up on next connect."
+  ]
+}

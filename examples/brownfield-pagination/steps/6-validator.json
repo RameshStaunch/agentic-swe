@@ -1,0 +1,19 @@
+{
+  "recommendation": "approve",
+  "risks": [
+    "Behaviour change: callers expecting every note in one response now get 50.",
+    "Clients that ignore response headers cannot discover further pages."
+  ],
+  "trade_offs": [
+    "Keyset over offset: stable under concurrent writes and O(page) per request, but no 'jump to page N'.",
+    "Header cursor over an envelope body: backward compatible, less discoverable."
+  ],
+  "failure_scenarios": [
+    "A client passes a cursor from a deleted note: still works, since the cursor is just an id bound."
+  ],
+  "guardrails": [
+    "limit is bounded to 1..200 and after must be >= 0 (422 otherwise).",
+    "Queries are parameterised.",
+    "Existing tests plus 6 new ones pass."
+  ]
+}

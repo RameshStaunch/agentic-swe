@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "tests/test_performance.py",
+      "content": "\"\"\"Guards against the N+1 regression: listing notes must cost a constant number of queries.\"\"\"\n\nimport pytest\nfrom fastapi.testclient import TestClient\n\nfrom notes.app import app, get_db\nfrom notes.db import connect\n\n\n@pytest.fixture\ndef traced(tmp_path, monkeypatch):\n    monkeypatch.setenv(\"NOTES_DB\", str(tmp_path / \"notes.db\"))\n    queries: list[str] = []\n\n    def traced_db():\n        conn = connect()\n        conn.set_trace_callback(queries.append)\n        try:\n            yield conn\n        finally:\n            conn.close()\n\n    app.dependency_overrides[get_db] = traced_db\n    yield TestClient(app), queries\n    app.dependency_overrides.clear()\n\n\ndef _list_query_count(client, queries, params=None) -> int:\n    queries.clear()\n    assert client.get(\"/notes\", params=params).status_code == 200\n    return sum(q.lstrip().upper().startswith(\"SELECT\") for q in queries)\n\n\n@pytest.mark.parametrize(\"params\", [None, {\"tag\": \"t\"}])\ndef test_list_query_count_is_constant(traced, params):\n    client, queries = traced\n    client.post(\"/notes\", json={\"title\": \"a\", \"body\": \"b\", \"tags\": [\"t\", \"u\"]})\n    few = _list_query_count(client, queries, params)\n    for i in range(40):\n        client.post(\"/notes\", json={\"title\": f\"n{i}\", \"body\": \"b\", \"tags\": [\"t\", \"u\"]})\n    assert _list_query_count(client, queries, params) == few\n\n\ndef test_tags_keep_insertion_order(traced):\n    client, _ = traced\n    client.post(\"/notes\", json={\"title\": \"a\", \"body\": \"b\", \"tags\": [\"z\", \"a\", \"m\"]})\n    assert client.get(\"/notes\").json()[0][\"tags\"] == [\"z\", \"a\", \"m\"]\n"
+    }
+  ],
+  "notes": "Asserts query count, not wall time, so the test is deterministic on any machine."
+}

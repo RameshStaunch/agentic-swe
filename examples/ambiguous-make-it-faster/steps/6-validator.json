@@ -1,0 +1,18 @@
+{
+  "recommendation": "approve",
+  "risks": [
+    "Very large unpaginated lists can exceed SQLite's bound-parameter limit in the IN clause.",
+    "Listing still returns every note; memory and payload size grow linearly."
+  ],
+  "trade_offs": [
+    "Kept the response unpaginated to honour 'no API changes', leaving the biggest win (pagination) on the table.",
+    "Two extra indexes slightly slow writes to note_tags in exchange for fast reads."
+  ],
+  "failure_scenarios": [
+    "A note table beyond ~32k rows makes the IN list fail on older SQLite builds; chunking the id list is the fix."
+  ],
+  "guardrails": [
+    "Regression test fails if per-note queries return.",
+    "Existing behaviour tests (tag filter, order) still pass."
+  ]
+}

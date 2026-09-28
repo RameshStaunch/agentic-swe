@@ -1,0 +1,24 @@
+{
+  "plan": "Six tasks in three waves: schema and code generation in parallel, then the HTTP API and unit tests, then integration tests and docs. The service is a stateless FastAPI app over Postgres with create, redirect and stats endpoints.",
+  "rationale": "Splitting persistence from code generation let independent work run concurrently and kept each task's file scope small, so the approval gate could enforce it. Tests were separate tasks so they were written against the finished interfaces rather than alongside them.",
+  "risks": [
+    "Stats cost grows with click history for very popular links.",
+    "In-flight clicks can be lost on crash.",
+    "No rate limiting or URL reputation checks yet."
+  ],
+  "trade_offs": [
+    "307 redirects for complete analytics.",
+    "Random codes for unguessability.",
+    "Background click writes for fast redirects."
+  ],
+  "assumptions": [
+    "Single Postgres, horizontally scaled app tier.",
+    "Anonymous links, no auth.",
+    "Analytics = counts per day and top referrers."
+  ],
+  "limitations": [
+    "No cache in front of redirects.",
+    "No migrations (create_all).",
+    "No abuse protection (rate limits, blocklists)."
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "tests/test_codes.py",
+      "content": "from shortener.codes import ALPHABET, CODE_LENGTH, new_code, valid_alias\n\n\ndef test_new_code_shape():\n    code = new_code()\n    assert len(code) == CODE_LENGTH\n    assert set(code) <= set(ALPHABET)\n\n\ndef test_new_codes_are_distinct():\n    assert len({new_code() for _ in range(10_000)}) == 10_000\n\n\ndef test_valid_alias():\n    assert valid_alias(\"my-link_1\")\n    assert not valid_alias(\"ab\")\n    assert not valid_alias(\"has space\")\n    assert not valid_alias(\"x\" * 33)\n    assert not valid_alias(\"links\")\n    assert not valid_alias(\"HEALTHZ\")\n"
+    }
+  ],
+  "notes": "Pure unit tests, no database needed."
+}

@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "content": "# notes\n\nA small, pre-existing notes service used as the brownfield target. FastAPI + stdlib sqlite3.\n\n- `POST /notes` create a note with tags\n- `GET /notes?tag=&limit=&after=` list notes oldest first, optionally filtered by tag. Paginated: `limit` defaults to 50 (max 200). When more notes exist the response carries an `X-Next-Cursor` header; pass it back as `after` to get the next page.\n- `GET /notes/{id}` fetch one\n- `DELETE /notes/{id}` delete one\n\nRun tests with `pytest` from this directory.\n"
+    }
+  ],
+  "notes": "One line on the new contract."
+}

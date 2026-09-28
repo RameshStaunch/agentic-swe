@@ -1,0 +1,40 @@
+[workspace]
+name = "agentic-swe"
+version = "0.1.0"
+description = "Agentic software engineering system prototype"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[dependencies]
+python = "3.12.*"
+fastapi = "*"
+uvicorn-standard = "*"
+sqlalchemy = "*"
+greenlet = ">=3.5.6,<4"
+asyncpg = "*"
+pydantic = "*"
+pydantic-ai = "*"
+postgresql = "*"
+typer = "*"
+rich = "*"
+pytest = "*"
+pytest-asyncio = "*"
+httpx = "*"
+hatchling = "*"
+pip = "*"
+
+[pypi-dependencies]
+agentic_swe = { path = ".", editable = true }
+
+[activation.env]
+DATABASE_URL = "postgresql+asyncpg://localhost:55432/agentic_swe"
+
+[tasks]
+db-init = "test -d pgdata || (initdb -D pgdata --auth=trust -U $USER && pg_ctl -D pgdata -l pgdata/log -o '-p 55432 -k /tmp' start && createdb -h localhost -p 55432 agentic_swe && createdb -h localhost -p 55432 url_shortener)"
+db-start = "pg_ctl -D pgdata -l pgdata/log -o '-p 55432 -k /tmp' start"
+db-stop = "pg_ctl -D pgdata stop"
+demo-shortener = "rm -rf url_shortener && python -m agentic_swe.cli run 'Build a scalable URL shortener service with APIs, persistence, and analytics.' --repo url_shortener --scope greenfield --mode full-auto --replay examples/greenfield-url-shortener"
+demo-brownfield = "rm -rf work/notes && mkdir -p work && cp -r seed_repo work/notes && python -m agentic_swe.cli run 'Add pagination to the notes list endpoint' --repo work/notes --scope brownfield --mode suggest --replay examples/brownfield-pagination"
+demo-ambiguous = "rm -rf work/notes && mkdir -p work && cp -r seed_repo work/notes && python -m agentic_swe.cli run 'Make the notes API faster' --repo work/notes --scope brownfield --mode auto-edit --replay examples/ambiguous-make-it-faster"
+api = "uvicorn agentic_swe.api:app"
+test = "pytest -q"

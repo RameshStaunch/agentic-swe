@@ -1,0 +1,19 @@
+{
+  "plan": "Asked three clarifying questions, then fixed the list endpoint's N+1 query pattern, moved tag filtering into SQL, indexed note_tags, and added a query-count regression test.",
+  "rationale": "'Faster' had no endpoint, target or constraints, so the run paused to ask rather than guess. With the answers (list endpoint, constant queries, no API changes) the fix was internal-only, and the test measures query count so it is a deterministic proxy for latency.",
+  "risks": [
+    "IN-list size limit on very large tables.",
+    "Unbounded response size remains."
+  ],
+  "trade_offs": [
+    "No pagination, per the constraint.",
+    "Write cost of two indexes."
+  ],
+  "assumptions": [
+    "The answers given apply; wall-clock latency was not measured, query count is the proxy."
+  ],
+  "limitations": [
+    "No benchmark against a realistic data set.",
+    "Recommend pagination (see the brownfield-pagination example) as a follow-up."
+  ]
+}

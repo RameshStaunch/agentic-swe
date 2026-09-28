@@ -1,0 +1,26 @@
+{
+  "recommendation": "approve",
+  "risks": [
+    "Stats queries scan all clicks for a link; a viral link with millions of clicks will make /stats slow.",
+    "Background click writes are lost if the process dies between response and insert.",
+    "No rate limiting on POST /links, so the service can be used to mass-create spam links.",
+    "Open redirect: any http(s) target is accepted, which phishing campaigns can abuse.",
+    "Schema is created with create_all at startup; there is no migration path yet."
+  ],
+  "trade_offs": [
+    "307 over 301: complete analytics at the cost of repeat-visit latency.",
+    "Random codes over id-encoding: unguessable and coordination-free, at the cost of a unique-index write check.",
+    "Raw click rows over counters: flexible reporting now, aggregation/partitioning needed later."
+  ],
+  "failure_scenarios": [
+    "Postgres unavailable: create and redirect both fail with 500; /healthz still answers, so it is a liveness check, not readiness.",
+    "Code space pressure: collision retries exhaust after 5 attempts and return 503 (probability negligible below ~10^10 links).",
+    "Clock skew between app instances slightly shifts expiry enforcement."
+  ],
+  "guardrails": [
+    "Only http(s) URLs up to 2048 characters are accepted; javascript: and data: URLs are rejected with 422.",
+    "Aliases are length- and charset-limited and cannot shadow API routes.",
+    "Unique constraint on links.code makes duplicate codes impossible even under concurrent writers.",
+    "11 unit and integration tests cover the happy path and every error status."
+  ]
+}

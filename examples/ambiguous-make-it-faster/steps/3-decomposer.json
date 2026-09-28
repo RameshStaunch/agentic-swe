@@ -1,0 +1,50 @@
+{
+  "rationale": "Indexes and the query rewrite touch different files and are independent, so they run in parallel. The regression test needs both; docs only need the new behaviour.",
+  "tasks": [
+    {
+      "id": "indexes",
+      "title": "Index note_tags",
+      "kind": "codegen",
+      "description": "Add indexes on note_tags(note_id) and note_tags(tag) to the schema.",
+      "depends_on": [],
+      "files": [
+        "notes/db.py"
+      ]
+    },
+    {
+      "id": "batch-tags",
+      "title": "Remove N+1 in list",
+      "kind": "codegen",
+      "description": "Load tags for all listed notes in one query; filter by tag in SQL; keep tag order and response shape.",
+      "depends_on": [],
+      "files": [
+        "notes/app.py"
+      ]
+    },
+    {
+      "id": "perf-tests",
+      "title": "Query-count regression test",
+      "kind": "test",
+      "description": "Count SELECTs per list request via sqlite3 trace callback; assert it does not grow with note count.",
+      "depends_on": [
+        "indexes",
+        "batch-tags"
+      ],
+      "files": [
+        "tests/test_performance.py"
+      ]
+    },
+    {
+      "id": "docs",
+      "title": "Document performance characteristics",
+      "kind": "docs",
+      "description": "README section on the constant-query list path.",
+      "depends_on": [
+        "batch-tags"
+      ],
+      "files": [
+        "README.md"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "intent": "Reduce latency of the notes API, target and endpoints to be confirmed.",
+  "scope": "brownfield",
+  "ambiguities": [
+    "'Faster' does not say which endpoint: create, list, fetch and delete have very different costs.",
+    "No target is given (latency percentile, data size), so there is no way to know when the work is done.",
+    "It is unclear whether API changes (e.g. pagination, dropping fields) are acceptable, or only internal changes."
+  ],
+  "clarifying_questions": [
+    "Which endpoint is slow, or is it all of them?",
+    "What does 'fast enough' mean: a latency target at what data size?",
+    "May the API contract change, or must it stay backward compatible?"
+  ],
+  "assumptions": [
+    "The list endpoint, since it is the only one whose cost grows with data size.",
+    "Constant query count for listing, regardless of how many notes exist.",
+    "No breaking API changes."
+  ],
+  "acceptance_criteria": [
+    "Listing notes performs a constant number of queries regardless of note count.",
+    "Tag filtering does not load notes that do not match.",
+    "The API contract is unchanged and existing tests pass.",
+    "A test fails if the per-note query pattern is reintroduced."
+  ]
+}

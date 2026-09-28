@@ -1,0 +1,9 @@
+{
+  "files": [
+    {
+      "path": "notes/db.py",
+      "content": "import os\nimport sqlite3\n\nSCHEMA = \"\"\"\nCREATE TABLE IF NOT EXISTS notes (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    title TEXT NOT NULL,\n    body TEXT NOT NULL,\n    created_at TEXT NOT NULL DEFAULT (datetime('now'))\n);\nCREATE TABLE IF NOT EXISTS note_tags (\n    note_id INTEGER NOT NULL REFERENCES notes(id),\n    tag TEXT NOT NULL\n);\nCREATE INDEX IF NOT EXISTS ix_note_tags_note_id ON note_tags(note_id);\nCREATE INDEX IF NOT EXISTS ix_note_tags_tag ON note_tags(tag);\n\"\"\"\n\n\ndef connect() -> sqlite3.Connection:\n    conn = sqlite3.connect(os.environ.get(\"NOTES_DB\", \"notes.db\"), check_same_thread=False)\n    conn.row_factory = sqlite3.Row\n    conn.executescript(SCHEMA)\n    return conn\n"
+    }
+  ],
+  "notes": "IF NOT EXISTS keeps this safe for existing databases."
+}

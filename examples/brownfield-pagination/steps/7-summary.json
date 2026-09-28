@@ -1,0 +1,17 @@
+{
+  "plan": "Changed the list handler to keyset pagination with the tag filter in SQL, then added tests and docs in parallel.",
+  "rationale": "Impact analysis showed the existing in-Python tag filter would make naive LIMIT paging return short or empty pages, so the filter moved into the query as part of the same change.",
+  "risks": [
+    "Unbounded-list callers silently get the first page only."
+  ],
+  "trade_offs": [
+    "No random page access.",
+    "Cursor in a header to keep the body shape."
+  ],
+  "assumptions": [
+    "Ordering by id (creation order) is acceptable."
+  ],
+  "limitations": [
+    "The per-note tag lookup (N+1) is unchanged."
+  ]
+}

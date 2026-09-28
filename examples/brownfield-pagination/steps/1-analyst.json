@@ -1,0 +1,18 @@
+{
+  "intent": "Make GET /notes return results in bounded pages that a client can walk through completely, without breaking existing clients.",
+  "scope": "brownfield",
+  "ambiguities": [],
+  "clarifying_questions": [],
+  "assumptions": [
+    "Cursor (keyset) pagination rather than offset, because notes can be inserted and deleted between page requests.",
+    "Default page size 50, maximum 200.",
+    "The response body stays a JSON list for backward compatibility; the next cursor is returned in an X-Next-Cursor header."
+  ],
+  "acceptance_criteria": [
+    "GET /notes returns at most `limit` notes (default 50, max 200).",
+    "Following X-Next-Cursor visits every note exactly once, in id order.",
+    "The tag filter is applied before paging, so pages are full when enough matching notes exist.",
+    "Invalid limit or cursor values return 422.",
+    "Existing tests still pass."
+  ]
+}

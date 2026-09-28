@@ -1,0 +1,39 @@
+{
+  "rationale": "One code change in the list handler; tests and docs both depend on its final interface and can run in parallel after it.",
+  "tasks": [
+    {
+      "id": "paginate-list",
+      "title": "Keyset pagination for GET /notes",
+      "kind": "codegen",
+      "description": "Add limit/after params, push the tag filter into SQL, fetch limit+1 rows to detect a next page, return X-Next-Cursor.",
+      "depends_on": [],
+      "files": [
+        "notes/app.py"
+      ]
+    },
+    {
+      "id": "pagination-tests",
+      "title": "Pagination tests",
+      "kind": "test",
+      "description": "Default size and cursor, full walk visits each note once, tag filter before paging, param validation.",
+      "depends_on": [
+        "paginate-list"
+      ],
+      "files": [
+        "tests/test_pagination.py"
+      ]
+    },
+    {
+      "id": "docs",
+      "title": "Document pagination",
+      "kind": "docs",
+      "description": "Describe the new params and header in the README.",
+      "depends_on": [
+        "paginate-list"
+      ],
+      "files": [
+        "README.md"
+      ]
+    }
+  ]
+}

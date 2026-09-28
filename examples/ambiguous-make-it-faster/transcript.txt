@@ -1,0 +1,88 @@
+run #5 · auto-edit · examples/ambiguous-make-it-faster
+─────────────────────────── 1 · Requirement analysis ───────────────────────────
+╭─────────────────────────── Normalized requirement ───────────────────────────╮
+│ Reduce latency of the notes API, target and endpoints to be confirmed.       │
+│                                                                              │
+│ • Listing notes performs a constant number of queries regardless of note     │
+│ count.                                                                       │
+│ • Tag filtering does not load notes that do not match.                       │
+│ • The API contract is unchanged and existing tests pass.                     │
+│ • A test fails if the per-note query pattern is reintroduced.                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────── Ambiguities ─────────────────────────────────╮
+│ • 'Faster' does not say which endpoint: create, list, fetch and delete have  │
+│ very different costs.                                                        │
+│ • No target is given (latency percentile, data size), so there is no way to  │
+│ know when the work is done.                                                  │
+│ • It is unclear whether API changes (e.g. pagination, dropping fields) are   │
+│ acceptable, or only internal changes.                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+? Which endpoint is slow, or is it all of them?
+  enter = The list endpoint, since it is the only one whose cost grows with data
+size.
+> The list endpoint. It gets slow once we have a few thousand notes.
+? What does 'fast enough' mean: a latency target at what data size?
+  enter = Constant query count for listing, regardless of how many notes exist.
+> Listing should not get slower as notes grow; constant number of DB queries per 
+request.
+? May the API contract change, or must it stay backward compatible?
+  enter = No breaking API changes.
+> No breaking API changes, existing clients must keep working.
+╭─────────────────────────────── Clarifications ───────────────────────────────╮
+│ Q: Which endpoint is slow, or is it all of them? A: The list endpoint. It    │
+│ gets slow once we have a few thousand notes.                                 │
+│ Q: What does 'fast enough' mean: a latency target at what data size? A:      │
+│ Listing should not get slower as notes grow; constant number of DB queries   │
+│ per request.                                                                 │
+│ Q: May the API contract change, or must it stay backward compatible? A: No   │
+│ breaking API changes, existing clients must keep working.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+───────────────────────── 2 · Codebase impact analysis ─────────────────────────
+╭─────────────────────────────────── Impact ───────────────────────────────────╮
+│ GET /notes runs one query for the notes and then one tag query per note      │
+│ (_tags inside a loop): 1+N queries. The tag filter also runs in Python after │
+│ loading every note. note_tags has no indexes, so each per-note lookup is a   │
+│ full scan of note_tags, making listing O(N x T). Fetch and create are        │
+│ single-row and not the bottleneck.                                           │
+│                                                                              │
+│ Files: notes/app.py, notes/db.py, README.md, tests/test_performance.py (new) │
+│ APIs: GET /notes (internal change only; same request and response)           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+──────────────────────────── 3 · Task decomposition ────────────────────────────
+                                   Task graph                                   
+┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Task                  ┃ Kind    ┃ Depends on          ┃ Files                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
+│ indexes               │ codegen │ -                   │ notes/db.py          │
+│ Index note_tags       │         │                     │                      │
+│ batch-tags            │ codegen │ -                   │ notes/app.py         │
+│ Remove N+1 in list    │         │                     │                      │
+│ perf-tests            │ test    │ indexes, batch-tags │ tests/test_performa… │
+│ Query-count           │         │                     │                      │
+│ regression test       │         │                     │                      │
+│ docs                  │ docs    │ batch-tags          │ README.md            │
+│ Document performance  │         │                     │                      │
+│ characteristics       │         │                     │                      │
+└───────────────────────┴─────────┴─────────────────────┴──────────────────────┘
+Indexes and the query rewrite touch different files and are independent, so they
+run in parallel. The regression test needs both; docs only need the new 
+behaviour.
+execution waves: (indexes, batch-tags) → (perf-tests, docs)
+Approve this plan?  y
+────────────────────────────────── 4 · Build ───────────────────────────────────
+wave 1: indexes, batch-tags
+  ✓ indexes notes/db.py
+  ✓ batch-tags notes/app.py
+wave 2: perf-tests, docs
+  ✓ docs README.md
+  ✓ perf-tests tests/test_performance.py
+────────────────────────────── 5 · Test & recover ──────────────────────────────
+tests: passed
+───────────────────────── 6 · Validation & risk review ─────────────────────────
+╭───────────────────────────── Validator: approve ─────────────────────────────╮
+│ • Very large unpaginated lists can exceed SQLite's bound-parameter limit in  │
+│ the IN clause.                                                               │
+│ • Listing still returns every note; memory and payload size grow linearly.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+───────────────────────────────── 7 · Summary ──────────────────────────────────
+ready_for_review → examples/ambiguous-make-it-faster/summary.md

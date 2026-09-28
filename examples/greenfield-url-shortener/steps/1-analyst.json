@@ -1,0 +1,20 @@
+{
+  "intent": "Build an HTTP service that turns long URLs into short codes, redirects short codes to their targets, persists links durably, and reports click analytics per link.",
+  "scope": "greenfield",
+  "ambiguities": [],
+  "clarifying_questions": [],
+  "assumptions": [
+    "'Scalable' means a stateless app tier that scales horizontally over one Postgres, not a multi-region design.",
+    "Analytics means per-link click counts over time and top referrers; no user accounts or dashboards.",
+    "Links are anonymous; there is no authentication or per-user ownership.",
+    "Optional custom aliases and optional expiry are in scope because they change the data model and are cheap now."
+  ],
+  "acceptance_criteria": [
+    "POST /links returns a short code for any valid http(s) URL and rejects other schemes.",
+    "GET /{code} redirects to the target URL; unknown codes return 404 and expired links 410.",
+    "Codes are unique, non-sequential and collision-safe under concurrent creation.",
+    "Every redirect is recorded as a click with timestamp and referrer.",
+    "GET /links/{code}/stats returns total clicks, clicks per day and top referrers.",
+    "Links and clicks persist in Postgres; unit and integration tests pass."
+  ]
+}

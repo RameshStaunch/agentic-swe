@@ -1,0 +1,20 @@
+{
+  "summary": "GET /notes in notes/app.py loads every note, then filters by tag in Python. Paging on top of that would be wrong: a page of 50 could come back with fewer matching notes, or none. The tag filter has to move into SQL before LIMIT is applied. No other endpoint or the schema needs to change.",
+  "impacted_files": [
+    "notes/app.py",
+    "README.md",
+    "tests/test_pagination.py (new)"
+  ],
+  "impacted_apis": [
+    "GET /notes: new `limit` and `after` query params, new `X-Next-Cursor` response header"
+  ],
+  "data_flow_changes": [
+    "Tag filtering moves from Python post-processing into the SQL WHERE clause.",
+    "Rows are read with keyset pagination (id > cursor ORDER BY id LIMIT n+1) instead of a full table read."
+  ],
+  "risk_notes": [
+    "Clients that relied on GET /notes returning everything now get the first 50 unless they follow the cursor.",
+    "Keeping the response a bare list avoids breaking existing clients, so the cursor has to travel in a header.",
+    "Per-note tag lookups (N+1) remain; out of scope for this change but noted."
+  ]
+}
