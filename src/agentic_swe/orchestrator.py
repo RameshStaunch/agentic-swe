@@ -4,6 +4,7 @@ import asyncio
 import difflib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -156,6 +157,38 @@ def _diff(path: Path, new: str, label: str) -> str:
     return "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True), f"a/{label}", f"b/{label}"))
 
 
+# macOS seatbelt profile: generated code may only write inside its repo and a scratch dir, and only reach localhost (test DBs).
+SANDBOX_PROFILE = """(version 1)
+(allow default)
+(deny network*)
+(allow network* (remote ip "localhost:*") (remote unix-socket))
+(deny file-write*)
+(allow file-write* (subpath "{repo}") (subpath "{scratch}") (literal "/dev/null") (literal "/dev/tty") (subpath "/dev/fd"))
+"""
+
+
+def test_python(repo: Path) -> tuple[str, str]:
+    """The repo's own pixi environment when it declares one, else the orchestrator's. Returns (python, description)."""
+    if (repo / "pixi.toml").exists() and shutil.which("pixi"):
+        # Installed outside the sandbox (it needs the network); only the tests run sandboxed.
+        r = subprocess.run(["pixi", "install", "--manifest-path", str(repo / "pixi.toml")], capture_output=True, text=True, timeout=900)
+        py = repo / ".pixi" / "envs" / "default" / "bin" / "python"
+        if r.returncode == 0 and py.exists():
+            return str(py), "repo's own pixi env"
+        return sys.executable, "orchestrator env (repo pixi install failed: " + (r.stderr.strip().splitlines() or ["?"])[-1] + ")"
+    return sys.executable, "orchestrator env"
+
+
+def sandboxed(cmd: list[str], repo: Path, scratch: str) -> tuple[list[str], str]:
+    if os.environ.get("AGENTIC_SWE_SANDBOX", "1") == "0":
+        return cmd, "none (AGENTIC_SWE_SANDBOX=0)"
+    if shutil.which("sandbox-exec"):
+        profile = SANDBOX_PROFILE.format(repo=repo.resolve(), scratch=Path(scratch).resolve())
+        return ["sandbox-exec", "-p", profile, *cmd], "sandbox-exec: writes limited to repo + scratch, network localhost only"
+    # ponytail: no sandbox off macOS yet; bubblewrap (Linux) or a container is the upgrade path
+    return cmd, "none (sandbox-exec unavailable on this OS)"
+
+
 def run_tests(repo: Path) -> tuple[bool, str]:
     errors = []
     for p in repo.rglob("*.py"):
@@ -165,14 +198,18 @@ def run_tests(repo: Path) -> tuple[bool, str]:
             errors.append(f"{p.relative_to(repo)}:{e.lineno}: {e.msg}")
     if errors:
         return False, "syntax errors:\n" + "\n".join(errors)
-    # A fresh bytecode cache per run: a same-size edit within the same second would otherwise reuse stale .pyc files.
-    with tempfile.TemporaryDirectory() as pycache:
+    python, env_desc = test_python(repo)
+    # Fresh scratch dir per run, used for bytecode (a same-size edit within the same second would otherwise reuse stale .pyc
+    # files) and as TMPDIR, so the sandbox only needs to allow writes to the repo and this directory.
+    with tempfile.TemporaryDirectory() as scratch:
+        cmd, sandbox_desc = sandboxed([python, "-m", "pytest", "-q", "-p", "no:cacheprovider"], repo, scratch)
         try:
-            r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=repo, capture_output=True,
-                               text=True, timeout=600, env={**os.environ, "PYTHONPYCACHEPREFIX": pycache})
+            r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=600,
+                               env={**os.environ, "PYTHONPYCACHEPREFIX": scratch, "TMPDIR": scratch})
         except subprocess.TimeoutExpired:
             return False, "pytest timed out after 600s"
-    out = (r.stdout + r.stderr)[-8000:]
+    header = f"[env: {env_desc}] [sandbox: {sandbox_desc}]\n"
+    out = header + (r.stdout + r.stderr)[-8000:]
     return r.returncode == 0, out if r.returncode != 5 else "no tests collected\n" + out
 
 

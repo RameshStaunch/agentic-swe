@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import pydantic_monty
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models import Model, infer_model
 
@@ -62,7 +63,20 @@ def grep(ctx: RunContext[Repo], pattern: str) -> str:
     return out[:MAX_READ] or "no matches"
 
 
-REPO_TOOLS = [list_files, read_file, grep]
+def run_python(code: str) -> str:
+    """Run a Python snippet in the Monty sandbox to check a regex, an algorithm or a calculation. Only a small stdlib subset
+    (re, json, math, dataclasses, ...) is available: no third-party packages, filesystem or network. Returns printed output
+    and the value of the last expression."""
+    out = pydantic_monty.CollectString(max_bytes=MAX_READ)
+    try:
+        with pydantic_monty.Monty() as pool, pool.checkout(limits={"max_feed_duration_secs": 5, "max_memory": 64 * 1024 * 1024}) as session:
+            value = session.feed_run(code, print_callback=out)
+    except pydantic_monty.MontyError as e:
+        return f"{out.output}\nerror: {e}"[:MAX_READ]
+    return f"{out.output}\n=> {value!r}"[:MAX_READ]
+
+
+REPO_TOOLS = [list_files, read_file, grep, run_python]
 
 analyst = Agent(
     output_type=NormalizedRequirement, name="requirement-analyst",

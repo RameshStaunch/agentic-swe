@@ -176,3 +176,37 @@ def test_mock_model_drives_the_live_agent_path(tmp_path):
     res = asyncio.run(orch.run("Add pagination to the notes list endpoint"))
     assert orch.scope == "brownfield" and res.status == "ready_for_review"
     assert (tmp_path / "run" / "steps" / "4-task-paginate-list.json").exists()
+
+
+# ---------------------------------------------------------------- sandboxes
+
+@pytest.mark.skipif(not shutil.which("sandbox-exec"), reason="macOS sandbox-exec only")
+def test_generated_tests_cannot_escape_the_repo(tmp_path):
+    from agentic_swe.orchestrator import run_tests
+
+    outside = Path.home() / ".agentic-swe-sandbox-probe"
+    (tmp_path / "test_escape.py").write_text(f'''
+import socket, pathlib, pytest
+
+def test_can_write_inside_repo():
+    pathlib.Path("inside.txt").write_text("ok")
+
+def test_cannot_write_outside():
+    with pytest.raises(PermissionError):
+        pathlib.Path({str(outside)!r}).write_text("escaped")
+
+def test_no_internet():
+    with pytest.raises(OSError):
+        socket.create_connection(("1.1.1.1", 443), timeout=3)
+''')
+    passed, out = run_tests(tmp_path)
+    assert passed, out
+    assert "sandbox-exec" in out and not outside.exists()
+
+
+def test_run_python_tool_is_sandboxed():
+    from agentic_swe.agents import run_python
+
+    assert run_python("sum(range(10))").endswith("=> 45")
+    assert "PermissionError" in run_python("open('/etc/passwd').read()")
+    assert "No module named 'subprocess'" in run_python("import subprocess")

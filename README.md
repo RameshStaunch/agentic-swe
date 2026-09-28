@@ -52,7 +52,7 @@ Any Pydantic AI model works: pass `--model <provider>:<model>` (or set `AGENTIC_
 | `openai:gpt-5` | `OPENAI_API_KEY` |
 | `mock` | none (offline, see below) |
 
-A missing key or unknown model fails before the run starts. Rate-limit and overload errors (429/5xx) are retried with backoff and then reported in one line. Free tiers are often rate-limited: the Gemini free tier has no quota for Pro models, and OpenRouter `:free` models are frequently throttled upstream.
+A missing key or unknown model fails before the run starts. Rate-limit and overload errors (429/5xx) are retried with backoff and then reported in one line.
 
 **`mock`** is an offline stand-in for an LLM, for testing. It answers each agent from the recorded examples, but unlike `--replay` it goes through the real Pydantic AI agent loop: output tools, schema validation and the decomposer's graph validator all run. It picks the example from words in your requirement ("faster"/"slow" → the ambiguous example, "pagination" → brownfield, anything else → the URL shortener), so it exercises the flow; it does not write code for arbitrary requests.
 
@@ -106,7 +106,7 @@ Like Claude Code and Codex, you choose how much the agents do on their own:
 | `auto-edit` | yes | yes | no | ask |
 | `full-auto` | no, uses stated assumptions | no | no | rejected |
 
-In every mode: the agents' read tools and all writes are confined to the working directory, `.git`/`.env`/`.pixi` are never written, each task may only write the files the plan declared for it, failing tests trigger up to 2 automatic fix attempts, and anything still failing escalates to the human (or is flagged `needs_review` in full-auto).
+In every mode: generated tests run sandboxed (on macOS, `sandbox-exec` limits them to the working directory and localhost) and in the repo's own pixi environment if it has a `pixi.toml`; code the agents execute runs in the [Monty](https://github.com/pydantic/monty) sandbox; the agents' read tools and all writes are confined to the working directory, `.git`/`.env`/`.pixi` are never written, each task may only write the files the plan declared for it, failing tests trigger up to 2 automatic fix attempts, and anything still failing escalates to the human (or is flagged `needs_review` in full-auto).
 
 ## HTTP API
 

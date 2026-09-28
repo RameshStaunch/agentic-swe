@@ -30,7 +30,7 @@ flowchart LR
 | Piece | Where | Role |
 |---|---|---|
 | Typed contracts | `models.py` | Every hand-off between agents is a Pydantic model. The model's output is validated against it; on failure Pydantic AI re-prompts the model with the validation error. |
-| Agents | `agents.py` | Seven `pydantic_ai.Agent`s, one per SDLC role. The Codebase Reasoner and Coder get read-only repo tools (`list_files`, `read_file`, `grep`) that refuse paths outside the repo. |
+| Agents | `agents.py` | Seven `pydantic_ai.Agent`s, one per SDLC role. The Codebase Reasoner and Coder get read-only repo tools (`list_files`, `read_file`, `grep`) that refuse paths outside the repo, and `run_python`, which executes snippets in the Monty sandbox. |
 | Orchestrator | `orchestrator.py` | Runs the pipeline, schedules the task DAG in waves, applies file writes, runs tests, loops on failures, renders the summary. |
 | Gate | `orchestrator.py: Gate` | The only place autonomy is decided. Every side effect (clarify, plan, write, escalate) goes through it, so the three modes are one small class rather than `if` statements scattered through the pipeline. |
 | Steps (record/replay) | `orchestrator.py: Steps` | Every agent output is saved to `steps/<name>.json`. With `--replay`, outputs are read back instead of calling the model; everything downstream still runs for real. |
@@ -47,7 +47,7 @@ flowchart LR
 3. **Codebase reasoning.** For brownfield, the Reasoner reads the code through tools before any planning and returns an `ImpactAnalysis` (files, APIs, data-flow changes, risks), which the Decomposer and every Coder task receive. In the pagination example this is what catches that the existing tag filter runs in Python, which would make naive paging wrong.
 4. **Orchestration.** Tasks run in topological waves; tasks in a wave run concurrently. Each Coder gets the design/impact context plus the files its dependencies produced. Failures are handled at three levels: schema retries inside an agent, one retry per failed task (then dependents are marked `blocked` rather than run on a broken base), and a test-driven fix loop over the whole change.
 5. **Output generation.** Code and tests are written to the target repo; the summary includes the API contract and SQL data model (greenfield) or impact analysis (brownfield); `changes.patch` is the reviewable diff.
-6. **Validation and risk control.** A syntax check and the full pytest suite run on the result; the Validator reviews the requirement, plan, diff and test output and returns risks, trade-offs, failure scenarios and guardrails with an approve/revise recommendation. Guardrails in code: per-task file scopes, path-escape and protected-path blocking, bounded retries.
+6. **Validation and risk control.** A syntax check and the full pytest suite run on the result, sandboxed and in the repo's own environment when it has one (see below); the Validator reviews the requirement, plan, diff and test output and returns risks, trade-offs, failure scenarios and guardrails with an approve/revise recommendation. Guardrails in code: per-task file scopes, path-escape and protected-path blocking, bounded retries.
 7. **Controlled autonomy.** `suggest` / `auto-edit` / `full-auto`, enforced by the gate (see README).
 8. **Final output.** `summary.md` per run: plan and rationale, understanding, architecture or impact, task results, artifacts, risks, trade-offs, failure scenarios, assumptions, limitations.
 
@@ -60,11 +60,17 @@ flowchart LR
 - **Record/replay at the agent boundary.** Makes demos deterministic and gives a golden-test harness for the orchestrator, but a replay only follows the recorded path (a different answer at a gate that changes the plan will diverge and stop with a clear error).
 - **Postgres with `create_all`, no migrations.** Fine for a prototype; alembic comes in with the first schema change.
 
+## Sandboxing and environments
+
+- **Generated tests run sandboxed.** On macOS the test suite runs under `sandbox-exec`: it can write only inside the working directory and a per-run scratch directory, and can reach only localhost (so integration tests can use the local Postgres). Nothing else on disk or on the network is reachable. Set `AGENTIC_SWE_SANDBOX=0` to disable it. `tests.txt` starts with a line saying which sandbox and environment were used.
+- **Each target repo can bring its own environment.** If the working directory has a `pixi.toml`, its environment is installed and the tests run with its Python and packages; otherwise they run in the orchestrator's environment.
+- **Code the agents execute runs in Monty.** The Codebase Reasoner and Coder have a `run_python` tool for checking a regex, an algorithm or a calculation. It runs in [pydantic-monty](https://github.com/pydantic/monty), a sandboxed interpreter with no filesystem, network or third-party imports, a 5 s time limit and a 64 MB memory cap. Monty is not used for the test suites because it cannot import pytest, sqlite3 or packages like FastAPI.
+
 ## Limitations
 
 - The coder sees whole files, so very large files are truncated at 20k characters in prompts.
-- Tests run in the orchestrator's own Python environment; target repos with different dependencies would need a per-repo environment (e.g. a pixi env per target).
-- No sandbox: generated tests execute locally. Container isolation is the obvious next step before pointing this at untrusted requirements.
+- The test sandbox is macOS only (`sandbox-exec`). On Linux, tests run unsandboxed; bubblewrap or a container is the upgrade path.
+- A target repo's `pixi install` runs outside the sandbox because it needs the network, so the packages a generated `pixi.toml` declares are trusted at install time.
 - The API only supports full-auto; interactive approvals over HTTP would need a pending-approvals endpoint.
-- Recorded examples were hand-authored. Live providers are wired and a single live Analyst call succeeded on Gemini, but full live runs have not completed yet: Gemini returned 503 (overloaded) and OpenRouter's free Qwen returned 429 (rate-limited upstream) during development.
+- Recorded examples were hand-authored in the agents' output schemas rather than captured from a model.
 - The mock model answers from three recorded scenarios, so it tests the flow, not arbitrary requirements.
