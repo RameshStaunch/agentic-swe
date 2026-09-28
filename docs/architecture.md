@@ -2,8 +2,9 @@
 
 ```mermaid
 flowchart LR
-    R[Requirement] --> A[Requirement Analyst]
+    R[Requirement + repo snapshot] --> A[Requirement Analyst<br/>NormalizedRequirement]
     A -->|ambiguities| G1{Gate: clarify}
+    G1 -->|answers, ≤2 follow-up rounds| A
     G1 --> X{scope}
     X -->|greenfield| AR[Architect<br/>DesignDoc]
     X -->|brownfield| CR[Codebase Reasoner<br/>ImpactAnalysis<br/>tools: list/read/grep]
@@ -34,11 +35,14 @@ flowchart LR
 | Gate | `orchestrator.py: Gate` | The only place autonomy is decided. Every side effect (clarify, plan, write, escalate) goes through it, so the three modes are one small class rather than `if` statements scattered through the pipeline. |
 | Steps (record/replay) | `orchestrator.py: Steps` | Every agent output is saved to `steps/<name>.json`. With `--replay`, outputs are read back instead of calling the model; everything downstream still runs for real. |
 | Audit trail | `db.py` | Postgres `runs` and append-only `events` (requirement, plan, each task start/done/error, every gate decision, test runs, fix attempts, validation). |
-| Front ends | `cli.py`, `api.py` | Typer CLI (interactive, all modes) and FastAPI (full-auto, for automation). Both call the same `execute()`. |
+| Model selection | `agents.py: load_model` | Agents are model-agnostic; the model is chosen per run from a Pydantic AI `<provider>:<model>` string, and the provider resolves its own API key. |
+| Mock model | `mock.py` | A `FunctionModel` that answers each agent from the recorded examples through the real agent loop, for offline testing. |
+| Working directories | `cli.py: workspace` | `--from` copies a codebase to a timestamped `work/<name>-<time>/`; `--repo` edits in place; neither creates `work/project-<time>/`. Nothing is ever deleted. |
+| Front ends | `session.py`, `cli.py`, `api.py` | Interactive session (model menu, conversational intake, slash commands), scripted CLI, and FastAPI (full-auto, for automation). All call the same `execute()`. |
 
 ## How each requirement is met
 
-1. **Requirement understanding.** The Analyst returns a `NormalizedRequirement`: intent, acceptance criteria, ambiguities, one clarifying question per ambiguity, and the default it would assume. The gate asks the questions (or, in full-auto, records the assumptions).
+1. **Requirement understanding.** The Analyst gets the requirement and a snapshot of the working directory's files, and returns a `NormalizedRequirement` (structured output): intent, `scope` (`greenfield` or `brownfield`, decided from the snapshot unless `--scope` is given), acceptance criteria, ambiguities, one clarifying question per ambiguity, and the default it would assume. A request is ambiguous when `ambiguities` is non-empty; this is separate from scope because a brownfield change can be ambiguous too. The gate asks the questions (or, in full-auto, records the assumptions), and the answers go back to the Analyst for up to two follow-up rounds in case they raise new questions.
 2. **Task decomposition.** The Decomposer returns a `TaskGraph`: tasks with kind, dependencies and the exact files each may touch. `validate_graph` rejects unknown dependencies, cycles, and parallel tasks that share files; errors go back to the model as a retry, so bad plans are corrected rather than executed.
 3. **Codebase reasoning.** For brownfield, the Reasoner reads the code through tools before any planning and returns an `ImpactAnalysis` (files, APIs, data-flow changes, risks), which the Decomposer and every Coder task receive. In the pagination example this is what catches that the existing tag filter runs in Python, which would make naive paging wrong.
 4. **Orchestration.** Tasks run in topological waves; tasks in a wave run concurrently. Each Coder gets the design/impact context plus the files its dependencies produced. Failures are handled at three levels: schema retries inside an agent, one retry per failed task (then dependents are marked `blocked` rather than run on a broken base), and a test-driven fix loop over the whole change.
@@ -62,4 +66,5 @@ flowchart LR
 - Tests run in the orchestrator's own Python environment; target repos with different dependencies would need a per-repo environment (e.g. a pixi env per target).
 - No sandbox: generated tests execute locally. Container isolation is the obvious next step before pointing this at untrusted requirements.
 - The API only supports full-auto; interactive approvals over HTTP would need a pending-approvals endpoint.
-- Recorded examples were hand-authored (live calls were out of scope for the build); live runs against Gemini/Claude have not been validated end to end yet.
+- Recorded examples were hand-authored. Live providers are wired and a single live Analyst call succeeded on Gemini, but full live runs have not completed yet: Gemini returned 503 (overloaded) and OpenRouter's free Qwen returned 429 (rate-limited upstream) during development.
+- The mock model answers from three recorded scenarios, so it tests the flow, not arbitrary requirements.
