@@ -150,10 +150,9 @@ class Gate:
         """Called when a toolchain is missing. Blocking: runs in a worker thread."""
         if self.mode == "full-auto":
             return "isolated"
-        ans = self.ask(f"[yellow]{', '.join(tc.binaries)} not installed.[/] Install {' '.join(tc.packages)} from conda-forge into\n"
-                       f"  1. an isolated pixi env under work/.toolchains/ (default)\n  2. your global environment (pixi global install)\n"
-                       f"  3. skip, don't run the tests\n> ").strip()
-        return {"2": "global", "3": "none"}.get(ans, "isolated")
+        ans = self.ask(f"[yellow]{', '.join(tc.binaries)} not installed.[/] Install {' '.join(tc.packages)} from conda-forge into an isolated "
+                       f"pixi env under work/.toolchains/ (nothing global)? [Y/n, n skips the tests] ").strip().lower()
+        return "none" if ans.startswith("n") else "isolated"
 
     async def escalate(self, message: str) -> bool:
         """Something failed past automatic recovery. Returns True to keep going."""

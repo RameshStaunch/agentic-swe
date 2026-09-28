@@ -37,7 +37,7 @@ flowchart LR
 | Audit trail | `db.py` | Postgres `runs` and append-only `events` (requirement, plan, each task start/done/error, every gate decision, test runs, fix attempts, validation). |
 | Model selection | `agents.py: load_model` | Agents are model-agnostic; the model is chosen per run from a Pydantic AI `<provider>:<model>` string, and the provider resolves its own API key. |
 | Mock model | `mock.py` | A `FunctionModel` that answers each agent from the recorded examples through the real agent loop, for offline testing. |
-| Toolchains | `toolchains.py` | Detects the repo's language, resolves a toolchain (repo `pixi.toml` → native binaries → user's choice of an isolated pixi env or a global install), fetches dependencies, and runs the language's test command in the sandbox. |
+| Toolchains | `toolchains.py` | Detects the repo's language, resolves a toolchain (repo `pixi.toml` → native binaries → an isolated pixi env, with the user's consent), fetches dependencies, and runs the language's test command in the sandbox. |
 | Working directories | `cli.py: workspace` | `--from` copies a codebase to a timestamped `work/<name>-<time>/`; `--repo` edits in place; neither creates `work/project-<time>/`. Nothing is ever deleted. |
 | Front ends | `session.py`, `cli.py`, `api.py` | Interactive session (model menu, conversational intake, slash commands), scripted CLI, and FastAPI (full-auto, for automation). All call the same `execute()`. |
 
@@ -64,7 +64,7 @@ flowchart LR
 ## Sandboxing and environments
 
 - **Generated tests run sandboxed.** On macOS the test command runs under `sandbox-exec`: it can write only inside the working directory, a per-run scratch directory and the toolchain cache, and can reach only localhost (so tests can start local servers and use the local Postgres). Nothing else on disk or on the network is reachable. Set `AGENTIC_SWE_SANDBOX=0` to disable it. `tests.txt` starts with a line naming the language, test command, toolchain and sandbox.
-- **Toolchains are not assumed.** A repo's own `pixi.toml` is used if present; otherwise binaries already on the machine are used; only when they are missing does the user choose an isolated pixi env (under `work/.toolchains/`), a global `pixi global install`, or skipping the tests. Pixi is how missing toolchains get installed, not a requirement on the target repo.
+- **Toolchains are not assumed.** A repo's own `pixi.toml` is used if present; otherwise binaries already on the machine are used; only when they are missing is the user asked whether to install them into an isolated pixi env under `work/.toolchains/` or skip the tests. Nothing is installed globally. Pixi is how missing toolchains get installed, not a requirement on the target repo.
 - **Code the agents execute runs in Monty.** The Codebase Reasoner and Coder have a `run_python` tool for checking a regex, an algorithm or a calculation. It runs in [pydantic-monty](https://github.com/pydantic/monty), a sandboxed interpreter with no filesystem, network or third-party imports, a 5 s time limit and a 64 MB memory cap. Monty is not used for the test suites because it cannot import pytest, sqlite3 or packages like FastAPI.
 
 ## Limitations

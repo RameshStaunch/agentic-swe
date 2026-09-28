@@ -1,5 +1,5 @@
-working in work/seed_go-20260928-202009
-run #21 · suggest · replay · examples/brownfield-go-validation
+working in work/seed_go-20260928-211316
+run #22 · suggest · replay · examples/brownfield-go-validation
 ─────────────────────────── 1 · Requirement analysis ───────────────────────────
 ╭─────────────────────────── Normalized requirement ───────────────────────────╮
 │ Make POST /todos reject titles that are empty (after trimming whitespace) or │
@@ -204,11 +204,8 @@ Bodies over 64 KiB are rejected.
 Apply 1 file(s) for docs?  y
   ✓ docs README.md
 ────────────────────────────── 5 · Test & recover ──────────────────────────────
-go not installed. Install go from conda-forge into
-  1. an isolated pixi env under work/.toolchains/ (default)
-  2. your global environment (pixi global install)
-  3. skip, don't run the tests
-> y
+go not installed. Install go from conda-forge into an isolated pixi env under 
+work/.toolchains/ (nothing global)? [Y/n, n skips the tests] y
 go toolchain: isolated pixi env 
 (~/Documents/experiments/agentic-swe/work/.toolchains/go)
 tests: passed

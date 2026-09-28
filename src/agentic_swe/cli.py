@@ -104,14 +104,14 @@ def run(
     out: Annotated[Path | None, typer.Option(help="Run output dir (default runs/<timestamp>-<slug>).")] = None,
     no_db: Annotated[bool, typer.Option("--no-db", help="Skip the Postgres audit trail.")] = False,
     install: Annotated[str, typer.Option(help="When the repo's language toolchain isn't installed: ask | isolated (pixi env under "
-                                              "work/.toolchains) | global (pixi global install) | none (skip tests). "
+                                              "work/.toolchains) | none (skip tests). Nothing is installed globally. "
                                               "A repo's own pixi.toml or native binaries are always used first.")] = "ask",
     model: Annotated[str, typer.Option(help="Pydantic AI '<provider>:<model>', e.g. google:gemini-flash-latest, anthropic:claude-sonnet-5, openai:gpt-5. "
                                             "The provider reads its own API key from the environment / .env. Default: $AGENTIC_SWE_MODEL.")] = DEFAULT_MODEL,
 ):
     """Take a requirement through analysis, planning, build, test, validation and summary."""
-    if install not in ("ask", "isolated", "global", "none"):
-        raise typer.BadParameter("install must be ask|isolated|global|none")
+    if install not in ("ask", "isolated", "none"):
+        raise typer.BadParameter("install must be ask|isolated|none")
     if repo and copy_from:
         raise typer.BadParameter("use --repo (edit in place) or --from (edit a copy), not both")
     if copy_from and not copy_from.is_dir():

@@ -64,7 +64,7 @@ Where the toolchain comes from, in order:
 
 1. **The repo's own `pixi.toml`**, if it has one: the repo chose pixi, so its environment is installed and used.
 2. **Binaries already installed** on the machine (`node`/`npm`, `go`, ...), used as they are.
-3. **Otherwise you choose** (`--install`, or a prompt in suggest/auto-edit mode): `isolated` installs the toolchain from conda-forge into a pixi env under `work/.toolchains/<language>/`, touching nothing else; `global` runs `pixi global install`; `none` skips the tests. Full-auto defaults to `isolated`.
+3. **Otherwise, an isolated pixi env, with your consent** (a prompt in suggest/auto-edit mode, or `--install isolated|none`): the toolchain is installed from conda-forge under `work/.toolchains/<language>/`, touching nothing else; `none` skips the tests. Nothing is ever installed globally. Full-auto defaults to `isolated`.
 
 Dependencies (`npm install`, `go mod download`) are fetched before the tests, outside the sandbox; the tests themselves run sandboxed. Python, Node and Go are supported; each language is one row in `toolchains.py`.
 
@@ -151,7 +151,7 @@ src/agentic_swe/
   agents.py        the seven agents, their repo tools (list/read/grep), and model loading
   mock.py          offline mock model
   orchestrator.py  pipeline, DAG waves, approval gate, test/fix loop, record/replay, summary rendering
-  toolchains.py    language detection, toolchain resolution (repo pixi / native / isolated / global), sandboxed test runs
+  toolchains.py    language detection, toolchain resolution (repo pixi / native / isolated), sandboxed test runs
   db.py            Postgres audit trail (runs, events)
   cli.py           scripted commands (run, runs, show) and working-directory handling
   session.py       interactive session

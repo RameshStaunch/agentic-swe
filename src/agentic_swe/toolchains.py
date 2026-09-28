@@ -1,7 +1,7 @@
 """Find the language of a repo, get a toolchain to test it with, and run its tests in a sandbox.
 
 Toolchain order: the repo's own pixi.toml (the user chose pixi for this repo) -> binaries already installed on the machine
--> otherwise the user's choice of an isolated pixi env (under work/.toolchains/, nothing global) or a global install."""
+-> otherwise, with the user's consent, an isolated pixi env under work/.toolchains/. Nothing is ever installed globally."""
 
 import os
 import shutil
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-Install = Literal["ask", "isolated", "global", "none"]
+Install = Literal["ask", "isolated", "none"]
 TOOLCHAINS_DIR = Path("work/.toolchains").resolve()
 
 
@@ -104,11 +104,6 @@ def resolve(repo: Path, language: str, install: Install, choose: Callable[[Toolc
         if bin_dir := _pixi_env_bin(env_dir / "pixi.toml"):
             return Resolved(tc, f"isolated pixi env ({env_dir})", [str(bin_dir)])
         return f"could not create an isolated pixi env for {language}"
-    if install == "global":
-        subprocess.run(["pixi", "global", "install", *tc.packages], capture_output=True, text=True, timeout=1800)
-        if all(shutil.which(b) for b in tc.binaries):
-            return Resolved(tc, "global (pixi global install)")
-        return f"pixi global install {' '.join(tc.packages)} did not put {', '.join(tc.binaries)} on PATH"
     return f"{', '.join(tc.binaries)} not installed; install skipped"
 
 
