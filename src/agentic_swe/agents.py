@@ -11,7 +11,7 @@ from pydantic_ai.models import Model, infer_model
 
 from .models import CodeChange, DesignDoc, EngineeringSummary, ImpactAnalysis, NormalizedRequirement, TaskGraph, ValidationReport
 
-DEFAULT_MODEL = os.environ.get("AGENTIC_SWE_MODEL", "google:gemini-flash-latest")
+DEFAULT_MODEL = os.environ.get("AGENTIC_SWE_MODEL", "openrouter:qwen/qwen3.8-27b:free")
 MAX_READ = 20_000
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from pydantic_ai.exceptions import UserError
+from pydantic_ai.exceptions import ModelHTTPError, UserError
 from pydantic_ai.models import Model
 from rich.console import Console
 
@@ -102,8 +102,12 @@ def run(
         except (UserError, ImportError) as e:
             raise typer.BadParameter(f"{model}: {e}  (or pass --replay <recorded run dir>)")
     console = Console(record=True)
-    result = asyncio.run(run_once(requirement, repo, scope, mode, model_name=model, llm=llm, replay=replay,
-                                  answers=answer or [], out=out, no_db=no_db, console=console))
+    try:
+        result = asyncio.run(run_once(requirement, repo, scope, mode, model_name=model, llm=llm, replay=replay,
+                                      answers=answer or [], out=out, no_db=no_db, console=console))
+    except ModelHTTPError as e:
+        console.print(f"[red]{model} failed after retries: HTTP {e.status_code}[/] {str(e.body)[:300]}")
+        raise typer.Exit(1)
     raise typer.Exit(0 if result.status in ("ready_for_review", "needs_review") else 1)
 
 

@@ -17,6 +17,7 @@ from .models import Mode
 
 MODELS = [  # (pydantic-ai model string, env var its provider reads)
     ("mock", ""),
+    ("openrouter:qwen/qwen3.8-27b:free", "OPENROUTER_API_KEY"),
     ("google:gemini-flash-latest", "GOOGLE_API_KEY"),
     ("google:gemini-pro-latest", "GOOGLE_API_KEY"),
     ("anthropic:claude-sonnet-5", "ANTHROPIC_API_KEY"),

@@ -26,7 +26,8 @@ For live runs, pick any Pydantic AI model with `--model <provider>:<model>` (or 
 | `--model` | Key |
 |---|---|
 | `mock` | none: offline, answers from the recorded examples (see below) |
-| `google:gemini-flash-latest` (default) | `GOOGLE_API_KEY` |
+| `openrouter:qwen/qwen3.8-27b:free` (default) | `OPENROUTER_API_KEY` |
+| `google:gemini-flash-latest` | `GOOGLE_API_KEY` |
 | `anthropic:claude-sonnet-5` | `ANTHROPIC_API_KEY` |
 | `openai:gpt-5` | `OPENAI_API_KEY` |
 
