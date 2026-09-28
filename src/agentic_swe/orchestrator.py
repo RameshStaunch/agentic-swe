@@ -301,7 +301,7 @@ class Orchestrator:
         c.rule("[bold]5 · Test & recover")
         toolchain = await asyncio.to_thread(resolve, self.repo, self.language, self.gate.install, self.gate.choose_install)
         await self.record("toolchain", {"language": self.language, "resolved": toolchain.how if isinstance(toolchain, Resolved) else toolchain})
-        c.print(f"[dim]{self.language} toolchain: {toolchain.how if isinstance(toolchain, Resolved) else toolchain}[/]")
+        c.print(f"[dim]{self.language} toolchain: {(toolchain.how if isinstance(toolchain, Resolved) else toolchain).replace(str(Path.home()), '~')}[/]")
         passed, output = run_tests(self.repo, toolchain)
         for attempt in range(1, MAX_FIX_ATTEMPTS + 1):
             await self.record("tests", {"attempt": attempt - 1, "passed": passed, "output": output[-3000:]})

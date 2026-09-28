@@ -210,7 +210,7 @@ go not installed. Install go from conda-forge into
   3. skip, don't run the tests
 > y
 go toolchain: isolated pixi env 
-(/Users/sumanthmanchala/Documents/experiments/agentic-swe/work/.toolchains/go)
+(~/Documents/experiments/agentic-swe/work/.toolchains/go)
 tests: passed
 ───────────────────────── 6 · Validation & risk review ─────────────────────────
 ╭───────────────────────────── Validator: approve ─────────────────────────────╮

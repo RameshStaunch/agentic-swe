@@ -160,7 +160,7 @@ def run_tests(repo: Path, rt: Resolved | str) -> tuple[bool, str]:
         except subprocess.TimeoutExpired:
             return False, "tests timed out after 600s"
     header = f"[{rt.tc.language}: {' '.join(rt.tc.test)}] [toolchain: {rt.how}] [sandbox: {sandbox_desc}]\n"
-    out = header + (r.stdout + r.stderr)[-8000:]
+    out = (header + (r.stdout + r.stderr)[-8000:]).replace(str(Path.home()), "~")
     if rt.tc.language == "python" and r.returncode == 5:
         return False, "no tests collected\n" + out
     return r.returncode == 0, out
