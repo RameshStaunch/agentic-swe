@@ -4,7 +4,7 @@ There are two things to test: the **system** (does the orchestration behave corr
 
 ## The system: `pixi run test`
 
-`tests/test_orchestrator.py` (17 tests) drives the real orchestrator with replayed agent outputs or the offline mock model, so it is deterministic, free, and needs no API key.
+`tests/test_orchestrator.py` (20 tests) drives the real orchestrator with replayed agent outputs or the offline mock model, so it is deterministic, free, and needs no API key.
 
 | Area | Test |
 |---|---|
@@ -16,6 +16,8 @@ There are two things to test: the **system** (does the orchestration behave corr
 | Live agent path | the `mock` model drives a full brownfield run through `agent.run()` (output tools, schema validation, graph validator), not replay |
 | Sandboxes | a generated test that tries to write outside the repo or reach the internet is blocked, while writing inside the repo and serving on localhost work (macOS); the `run_python` tool cannot read files or import `subprocess` |
 | Languages | Python, Node and Go repos are detected from their marker files |
+| Repo instructions | a repository's `AGENTS.md` appears in every agent prompt during a run |
+| Setup | a new project asks the user how to set it up (full-auto uses the language default); a user-given test command runs tests for a language with no built-in toolchain, and declining gives a clear "tests skipped" reason |
 | Golden runs | each of the four committed examples (including the Go one, which installs Go into an isolated pixi env when it is missing) replays against a fresh copy of its repo and must end `ready_for_review` with its generated tests passing |
 
 The recovery test caught a real bug while building this: a fix that changed a file without changing its size, within the same second, was invisible to the test run because Python reused the stale `.pyc`. Test runs now use a fresh bytecode cache.

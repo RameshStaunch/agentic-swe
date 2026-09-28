@@ -95,8 +95,10 @@ def _check_graph(graph: TaskGraph) -> TaskGraph:
 class Gate:
     """The single place autonomy is enforced. Every side effect asks the gate first."""
 
-    def __init__(self, mode: Mode, ask: Ask, console: Console, answers: list[str] | None = None, install: Install = "ask"):
+    def __init__(self, mode: Mode, ask: Ask, console: Console, answers: list[str] | None = None, install: Install = "ask",
+                 test_command: str = ""):
         self.mode, self.ask, self.console, self.answers, self.install = mode, ask, console, answers or [], install
+        self.test_command = test_command  # the user's own test command; used as-is, ahead of anything detected
         self._lock = asyncio.Lock()
 
     async def _prompt(self, question: str) -> str:
@@ -146,13 +148,31 @@ class Gate:
             return [], None
         return [], ans
 
-    def choose_install(self, tc: Toolchain) -> Install:
-        """Called when a toolchain is missing. Blocking: runs in a worker thread."""
+    def choose_install(self, tc: Toolchain) -> tuple[Install, str]:
+        """Called when a toolchain is missing; the user decides how tests run. Blocking: runs in a worker thread."""
         if self.mode == "full-auto":
-            return "isolated"
-        ans = self.ask(f"[yellow]{', '.join(tc.binaries)} not installed.[/] Install {' '.join(tc.packages)} from conda-forge into an isolated "
-                       f"pixi env under work/.toolchains/ (nothing global)? [Y/n, n skips the tests] ").strip().lower()
-        return "none" if ans.startswith("n") else "isolated"
+            return ("isolated", "") if tc.packages else ("none", "")
+        tools = ", ".join(tc.binaries) or f"the {tc.language} toolchain"
+        options = ([f"  1. install {' '.join(tc.packages)} from conda-forge into an isolated pixi env under work/.toolchains/ (nothing global)"]
+                   if tc.packages else [])
+        options += ["  2. run a command you give me, e.g. docker run --rm -v \"$PWD\":/w -w /w golang:1.22 go test ./...",
+                    "  3. skip the tests"]
+        ans = self.ask(f"[yellow]{tools} not installed.[/] How should I run the tests?\n" + "\n".join(options)
+                       + f"\n> ").strip()
+        if ans == "2":
+            return "custom", self.ask("Command, run from the repository root: ").strip()
+        if ans == "3" or (ans in ("", "1") and not tc.packages):
+            return "none", ""
+        return "isolated", ""
+
+    def setup(self, req: NormalizedRequirement) -> str:
+        """For a new project, how the user wants it set up. Blocking: runs in a worker thread."""
+        default = f"{req.language} with its standard package manager and test framework"
+        if self.mode == "full-auto" or self.answers:
+            return default
+        ans = self.ask("[bold yellow]?[/] New project: how should it be set up? Language, package manager, test framework, "
+                       f"how tests are run, any tools you want or want avoided.\n  [dim]enter = {default}[/]\n> ").strip()
+        return ans or default
 
     async def escalate(self, message: str) -> bool:
         """Something failed past automatic recovery. Returns True to keep going."""
@@ -230,11 +250,16 @@ class Orchestrator:
 
         # 1. Understand
         c.rule("[bold]1 · Requirement analysis")
+        agents_md = self.repo / "AGENTS.md"
+        self.repo_instructions = agents_md.read_text()[:agents.MAX_READ] if agents_md.is_file() else ""
+        if self.repo_instructions:
+            await self.record("repo_instructions", {"file": "AGENTS.md", "chars": len(self.repo_instructions)})
+            c.print("[dim]following AGENTS.md from the repository[/]")
         files = sorted(str(p.relative_to(self.repo)) for p in self.repo.rglob("*")
                        if p.is_file() and not any(part.startswith(".") or part == "__pycache__" for part in p.relative_to(self.repo).parts))
         snapshot = "\n".join(files[:80]) or "(empty directory)"
         scope_line = f"Scope: {self.scope}" if self.scope else "Scope: decide from the repository snapshot (empty or unrelated -> greenfield, existing code to change -> brownfield)"
-        prompt = f"{scope_line}\nRequirement: {requirement}\n\nRepository snapshot ({len(files)} files):\n{snapshot}"
+        prompt = f"{scope_line}\nRequirement: {requirement}\n\nRepository snapshot ({len(files)} files):\n{snapshot}" + self._instructions()
         req = await self.steps.call("1-analyst", agents.analyst, prompt)
         clarifications: list[str] = []
         for round_ in range(2, 4):  # answers can surface new questions; at most two follow-up rounds
@@ -258,9 +283,15 @@ class Orchestrator:
 
         # 2. Understand the system (design for greenfield, impact analysis for brownfield)
         context: DesignDoc | ImpactAnalysis
+        setup = ""
+        if self.scope == "greenfield":
+            setup = await asyncio.to_thread(self.gate.setup, req)
+            await self.record("setup", {"instructions": setup})
+            c.print(f"[bold]Setup:[/] {setup}")
         tc = TOOLCHAINS.get(self.language)
-        tooling = f"Language: {self.language}." + (f" Tests must pass with `{' '.join(tc.test)}` run from the repository root." if tc else "")
-        brief = f"{tooling}\nRequirement:\n{dump(req)}\nClarifications:\n" + "\n".join(clarifications or ["none"])
+        tooling = f"Language: {self.language}." + (f" Default test command: `{' '.join(tc.test)}` from the repository root." if tc else "")
+        brief = (f"{tooling}\n" + (f"Project setup requested by the user (follow it): {setup}\n" if setup else "")
+                 + f"Requirement:\n{dump(req)}\nClarifications:\n" + "\n".join(clarifications or ["none"]) + self._instructions())
         if self.scope == "greenfield":
             c.rule("[bold]2 · Architecture")
             context = await self.steps.call("2-architect", agents.architect, brief)
@@ -298,7 +329,12 @@ class Orchestrator:
 
         # 5. Test, and feed failures back as fix tasks
         c.rule("[bold]5 · Test & recover")
-        toolchain = await asyncio.to_thread(resolve, self.repo, self.language, self.gate.install, self.gate.choose_install)
+        if self.gate.test_command:
+            toolchain = Resolved(TOOLCHAINS.get(self.language) or Toolchain(self.language, (), (), (), ()), "user-provided command",
+                                 shell=self.gate.test_command, custom=True)
+        else:
+            toolchain = await asyncio.to_thread(resolve, self.repo, self.language, self.gate.install, self.gate.choose_install,
+                                                getattr(context, "test_command", ""))
         await self.record("toolchain", {"language": self.language, "resolved": toolchain.how if isinstance(toolchain, Resolved) else toolchain})
         c.print(f"[dim]{self.language} toolchain: {(toolchain.how if isinstance(toolchain, Resolved) else toolchain).replace(str(Path.home()), '~')}[/]")
         passed, output = run_tests(self.repo, toolchain)
@@ -412,6 +448,10 @@ class Orchestrator:
             "".join(difflib.unified_diff(self.originals[p].splitlines(True), (self.repo / p).read_text().splitlines(True),
                                          f"a/{self.repo.name}/{p}", f"b/{self.repo.name}/{p}"))
             for p in sorted(self.written))
+
+    def _instructions(self) -> str:
+        return ("\n\nRepository instructions from AGENTS.md. Follow them; they override general conventions:\n" + self.repo_instructions
+                if self.repo_instructions else "")
 
     def _show_requirement(self, req: NormalizedRequirement) -> None:
         self.console.print(Panel(f"[bold]{req.intent}[/]\n\n" + "\n".join(f"• {a}" for a in req.acceptance_criteria), title="Normalized requirement"))

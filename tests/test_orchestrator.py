@@ -226,3 +226,44 @@ def test_detects_language_from_markers(tmp_path):
     (tmp_path / "package.json").write_text("{}")
     assert detect(tmp_path) == "node"
     assert detect(tmp_path / "missing") is None
+
+
+# ---------------------------------------------------------------- repo instructions and user-chosen setup
+
+def test_agents_md_reaches_every_agent(tmp_path):
+    from pydantic_ai.models.function import FunctionModel
+
+    from agentic_swe.mock import _prompt, mock_model
+
+    repo = tmp_path / "repo"
+    shutil.copytree(ROOT / "seed_repo", repo, ignore=shutil.ignore_patterns("__pycache__"))
+    (repo / "AGENTS.md").write_text("MARKER: never use print statements")
+    seen: list[str] = []
+    inner = mock_model().function
+    spy = FunctionModel(lambda msgs, info: (seen.append(_prompt(msgs)), inner(msgs, info))[1], model_name="spy")
+
+    async def record(kind, payload):
+        pass
+
+    orch = Orchestrator(repo, None, Gate("full-auto", never_ask, quiet()), record, tmp_path / "run", quiet(), model=spy)
+    assert asyncio.run(orch.run("Add pagination to the notes list endpoint")).status == "ready_for_review"
+    assert seen and all("MARKER: never use print statements" in p for p in seen)
+
+
+def test_new_project_asks_how_to_set_it_up():
+    req = NormalizedRequirement(intent="i", scope="greenfield", language="go", ambiguities=[], clarifying_questions=[],
+                                assumptions=[], acceptance_criteria=[])
+    assert Gate("suggest", lambda q: "Go 1.22, standard library only, go test", quiet()).setup(req) == "Go 1.22, standard library only, go test"
+    assert "go with its standard" in Gate("full-auto", never_ask, quiet()).setup(req)
+
+
+def test_user_command_runs_tests_for_an_unknown_toolchain(tmp_path):
+    from agentic_swe.toolchains import resolve, run_tests
+
+    answers = iter(["2", "test -f marker.txt"])
+    gate = Gate("suggest", lambda q: next(answers), quiet())
+    (tmp_path / "marker.txt").write_text("x")
+    rt = resolve(tmp_path, "rust", "ask", gate.choose_install)
+    passed, out = run_tests(tmp_path, rt)
+    assert passed and "user-provided command" in out
+    assert resolve(tmp_path, "rust", "ask", lambda tc: ("none", "")) == "no toolchain for rust: unknown tools not installed; tests skipped"

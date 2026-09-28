@@ -45,6 +45,8 @@ class DesignDoc(BaseModel):
     api_contract: list[ApiEndpoint]
     data_model: str = Field(description="SQL DDL or equivalent schema description.")
     key_decisions: list[str] = Field(description="Decision and the trade-off it makes.")
+    test_command: str = Field("", description="Shell command, run from the repository root, that runs the whole test suite for the "
+                                              "project as set up (follow the user's setup instructions).")
 
 
 class ImpactAnalysis(BaseModel):
@@ -53,6 +55,8 @@ class ImpactAnalysis(BaseModel):
     impacted_apis: list[str]
     data_flow_changes: list[str]
     risk_notes: list[str]
+    test_command: str = Field("", description="Shell command this repository itself uses to run its tests, found in AGENTS.md, CI "
+                                              "config, Makefile/justfile, package.json scripts or the README. Empty if none is declared.")
 
 
 class FileWrite(BaseModel):

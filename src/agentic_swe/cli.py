@@ -45,10 +45,11 @@ def workspace(name: str, copy_from: Path | None = None) -> Path:
 
 
 async def execute(requirement: str, repo: Path, scope: Scope | None, mode: Mode, *, ask: Ask, answers: list[str], replay: Path | None,
-                  run_dir: Path, record: Record, console: Console, model: Model | None = None, install: Install = "ask") -> Result:
+                  run_dir: Path, record: Record, console: Console, model: Model | None = None, install: Install = "ask",
+                  test_command: str = "") -> Result:
     run_dir.mkdir(parents=True, exist_ok=True)
     try:
-        return await Orchestrator(repo, scope, Gate(mode, ask, console, answers, install), record, run_dir, console, replay, model).run(requirement)
+        return await Orchestrator(repo, scope, Gate(mode, ask, console, answers, install, test_command), record, run_dir, console, replay, model).run(requirement)
     except Exception as e:
         await record("run_finished", {"status": "error", "error": repr(e)})
         raise
@@ -71,7 +72,7 @@ def terminal_ask(console: Console) -> Ask:
 
 async def run_once(requirement: str, repo: Path, scope: Scope | None, mode: Mode, *, model_name: str, llm: Model | None,
                    replay: Path | None, answers: list[str], out: Path | None, no_db: bool, console: Console,
-                   install: Install = "ask") -> Result:
+                   install: Install = "ask", test_command: str = "") -> Result:
     run_dir = new_run_dir(requirement, out)
     record: Record = _noop
     engine = None
@@ -84,7 +85,7 @@ async def run_once(requirement: str, repo: Path, scope: Scope | None, mode: Mode
         console.print(f"[dim]run #{run_id} · {mode} · {'replay' if replay else model_name} · {run_dir}[/]")
     try:
         return await execute(requirement, repo, scope, mode, ask=terminal_ask(console), answers=answers,
-                             replay=replay, run_dir=run_dir, record=record, console=console, model=llm, install=install)
+                             replay=replay, run_dir=run_dir, record=record, console=console, model=llm, install=install, test_command=test_command)
     finally:
         if engine:
             await engine.dispose()
@@ -106,6 +107,8 @@ def run(
     install: Annotated[str, typer.Option(help="When the repo's language toolchain isn't installed: ask | isolated (pixi env under "
                                               "work/.toolchains) | none (skip tests). Nothing is installed globally. "
                                               "A repo's own pixi.toml or native binaries are always used first.")] = "ask",
+    test_command: Annotated[str, typer.Option(help="Your own command to run the tests (e.g. a docker or nix command), used as-is "
+                                                   "instead of anything detected.")] = "",
     model: Annotated[str, typer.Option(help="Pydantic AI '<provider>:<model>', e.g. google:gemini-flash-latest, anthropic:claude-sonnet-5, openai:gpt-5. "
                                             "The provider reads its own API key from the environment / .env. Default: $AGENTIC_SWE_MODEL.")] = DEFAULT_MODEL,
 ):
@@ -129,7 +132,8 @@ def run(
     console.print(f"[dim]working in {repo}[/]")
     try:
         result = asyncio.run(run_once(requirement, repo, scope, mode, model_name=model, llm=llm, replay=replay,
-                                      answers=answer or [], out=out, no_db=no_db, console=console, install=install))  # type: ignore[arg-type]
+                                      answers=answer or [], out=out, no_db=no_db, console=console, install=install,  # type: ignore[arg-type]
+                                      test_command=test_command))
     except ModelHTTPError as e:
         console.print(f"[red]{model} failed after retries: HTTP {e.status_code}[/] {str(e.body)[:300]}")
         raise typer.Exit(1)

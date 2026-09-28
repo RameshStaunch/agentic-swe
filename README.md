@@ -56,17 +56,22 @@ A missing key or unknown model fails before the run starts. Rate-limit and overl
 
 **`mock`** is an offline stand-in for an LLM, for testing. It answers each agent from the recorded examples, but unlike `--replay` it goes through the real Pydantic AI agent loop: output tools, schema validation and the decomposer's graph validator all run. It picks the example from words in your requirement ("faster"/"slow" → the ambiguous example, "pagination" → brownfield, "todo"/"title" → the Go example, anything else → the URL shortener), so it exercises the flow; it does not write code for arbitrary requests.
 
-## Languages and toolchains
+## Languages, repo instructions and setup
 
-The target codebase does not have to be Python. The language comes from the repository's marker files (`pyproject.toml`/`conftest.py`, `package.json`, `go.mod`) or, for a new project, from the analyst's structured `language` field. Each language has a test command (`pytest`, `npm test`, `go test ./...`) that the coder is told to satisfy and the orchestrator runs.
+The target codebase does not have to be Python. The language comes from the repository's marker files (`pyproject.toml`/`conftest.py`, `package.json`, `go.mod`) or, for a new project, from the analyst's structured `language` field.
 
-Where the toolchain comes from, in order:
+- **`AGENTS.md` is honoured.** If the repository has one, its contents are added to every agent's prompt as repository instructions that override general conventions.
+- **The repo says how it is tested.** The codebase reasoner reports the test command the repository itself declares (in `AGENTS.md`, CI config, a `Makefile`/`justfile`, `package.json` scripts or the README) as a structured field, and that command is what runs. Without one, the language default is used (`pytest`, `npm test`, `go test ./...`).
+- **New projects ask you how to set them up**: language, package manager, test framework, how tests run, tools to use or avoid. The answer goes to every agent, and the architect returns the resulting test command. Full-auto uses the language's standard tooling.
+- **Or state it yourself:** `--test-command "..."` is used as-is, ahead of anything detected (a Docker, nix or asdf command works here).
 
-1. **The repo's own `pixi.toml`**, if it has one: the repo chose pixi, so its environment is installed and used.
+Where the tools come from, in order:
+
+1. **The repo's own `pixi.toml`**, if it has one.
 2. **Binaries already installed** on the machine (`node`/`npm`, `go`, ...), used as they are.
-3. **Otherwise, an isolated pixi env, with your consent** (a prompt in suggest/auto-edit mode, or `--install isolated|none`): the toolchain is installed from conda-forge under `work/.toolchains/<language>/`, touching nothing else; `none` skips the tests. Nothing is ever installed globally. Full-auto defaults to `isolated`.
+3. **Otherwise you decide** (a prompt in suggest/auto-edit mode): install the toolchain from conda-forge into an isolated pixi env under `work/.toolchains/<language>/`; give a command of your own (for toolchains conda-forge doesn't have, or to use Docker); or skip the tests. Nothing is ever installed globally, and Docker is never assumed. Full-auto uses the isolated env when conda-forge has the toolchain, otherwise skips the tests and flags the run. `--install isolated|none` answers the question up front.
 
-Dependencies (`npm install`, `go mod download`) are fetched before the tests, outside the sandbox; the tests themselves run sandboxed. Python, Node and Go are supported; each language is one row in `toolchains.py`.
+Dependencies (`npm install`, `go mod download`) are fetched before the tests, outside the sandbox; the tests themselves run sandboxed (macOS only for now). Python, Node and Go have built-in defaults; any other language works through a declared or user-given test command.
 
 ## Scripted runs
 
@@ -75,6 +80,7 @@ pixi run agentic-swe run "Add rate limiting to note creation" --from seed_repo -
 pixi run agentic-swe run "Make the notes API faster" --from seed_repo --model mock
 pixi run agentic-swe run "Build a scalable URL shortener service with APIs, persistence, and analytics." --mode full-auto
 pixi run agentic-swe run "Reject todos with an empty or overlong title" --from seed_go --install isolated
+pixi run agentic-swe run "Add a CLI flag" --from ../my-rust-tool --test-command "cargo test"
 ```
 
 **Where the agents work:**

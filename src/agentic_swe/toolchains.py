@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-Install = Literal["ask", "isolated", "none"]
+Install = Literal["ask", "isolated", "custom", "none"]
 TOOLCHAINS_DIR = Path("work/.toolchains").resolve()
 
 
@@ -59,6 +59,8 @@ class Resolved:
     how: str  # human-readable: where the binaries come from
     path_prefix: list[str] = field(default_factory=list)
     python: str | None = None  # orchestrator interpreter when python runs natively
+    shell: str | None = None  # test command from the repo, the design, or the user; replaces the language default
+    custom: bool = False  # the user supplied the whole command (including any setup), so skip our dependency step
 
     def env(self, scratch: str) -> dict[str, str]:
         cache = TOOLCHAINS_DIR / "cache" / self.tc.language
@@ -71,6 +73,12 @@ class Resolved:
     def command(self, cmd: tuple[str, ...]) -> list[str]:
         return [self.python if (c == "python" and self.python) else c for c in cmd]
 
+    def test_command(self) -> list[str]:
+        return ["/bin/sh", "-c", self.shell] if self.shell else self.command(self.tc.test)
+
+    def test_label(self) -> str:
+        return self.shell or " ".join(self.tc.test)
+
 
 def _pixi_env_bin(manifest: Path) -> Path | None:
     r = subprocess.run(["pixi", "install", "--manifest-path", str(manifest)], capture_output=True, text=True, timeout=1800)
@@ -78,24 +86,34 @@ def _pixi_env_bin(manifest: Path) -> Path | None:
     return bin_dir if r.returncode == 0 and bin_dir.exists() else None
 
 
-def resolve(repo: Path, language: str, install: Install, choose: Callable[[Toolchain], Install]) -> Resolved | str:
-    """A toolchain for `language`, or a string saying why there is none."""
-    tc = TOOLCHAINS.get(language)
-    if tc is None:
-        return f"no toolchain known for {language}"
+def resolve(repo: Path, language: str, install: Install, choose: Callable[[Toolchain], tuple[Install, str]],
+            test_command: str = "") -> Resolved | str:
+    """A toolchain for `language`, or a string saying why there is none. `test_command` (declared by the repo or the design)
+    replaces the language's default test command."""
+    rt = _resolve(repo, language, install, choose)
+    if isinstance(rt, Resolved) and test_command and not rt.shell:
+        rt.shell = test_command
+    return rt
+
+
+def _resolve(repo: Path, language: str, install: Install, choose: Callable[[Toolchain], tuple[Install, str]]) -> Resolved | str:
+    tc = TOOLCHAINS.get(language) or Toolchain(language, (), (), (), ())
+    if not tc.test and install != "custom":
+        install = "ask"  # unknown language: only the user can say how to run its tests
     has_pixi = bool(shutil.which("pixi"))
     if (repo / "pixi.toml").exists() and has_pixi:
         if bin_dir := _pixi_env_bin(repo / "pixi.toml"):
             return Resolved(tc, "repo's own pixi env", [str(bin_dir)])
     if language == "python":
         return Resolved(tc, f"native ({sys.executable})", python=sys.executable)
-    if all(shutil.which(b) for b in tc.binaries):
+    if tc.binaries and all(shutil.which(b) for b in tc.binaries):
         return Resolved(tc, "native (" + ", ".join(shutil.which(b) or b for b in tc.binaries) + ")")
-    if not has_pixi:
-        return f"{', '.join(tc.binaries)} not installed and pixi is unavailable to install it"
+    custom = ""
     if install == "ask":
-        install = choose(tc)
-    if install == "isolated":
+        install, custom = choose(tc)
+    if install == "custom" and custom:
+        return Resolved(tc, "user-provided command", shell=custom, custom=True)
+    if install == "isolated" and tc.packages and has_pixi:
         env_dir = TOOLCHAINS_DIR / language
         env_dir.mkdir(parents=True, exist_ok=True)
         (env_dir / "pixi.toml").write_text(
@@ -104,7 +122,7 @@ def resolve(repo: Path, language: str, install: Install, choose: Callable[[Toolc
         if bin_dir := _pixi_env_bin(env_dir / "pixi.toml"):
             return Resolved(tc, f"isolated pixi env ({env_dir})", [str(bin_dir)])
         return f"could not create an isolated pixi env for {language}"
-    return f"{', '.join(tc.binaries)} not installed; install skipped"
+    return f"no toolchain for {language}: {', '.join(tc.binaries) or 'unknown tools'} not installed; tests skipped"
 
 
 # macOS seatbelt profile: generated code may only write inside its repo, a scratch dir and the toolchain cache, and only
@@ -145,17 +163,17 @@ def run_tests(repo: Path, rt: Resolved | str) -> tuple[bool, str]:
     # stale .pyc files), so the sandbox only needs to allow writes to the repo, this dir and the toolchain cache.
     with tempfile.TemporaryDirectory() as scratch:
         env = rt.env(scratch)
-        if rt.tc.prepare:
+        if rt.tc.prepare and not rt.custom:
             p = subprocess.run(rt.command(rt.tc.prepare), cwd=repo, capture_output=True, text=True, timeout=900, env=env)
             if p.returncode:
                 return False, f"dependency install failed ({' '.join(rt.tc.prepare)}):\n{(p.stdout + p.stderr)[-4000:]}"
-        cmd, sandbox_desc = sandboxed(rt.command(rt.tc.test), repo, scratch)
+        cmd, sandbox_desc = sandboxed(rt.test_command(), repo, scratch)
         try:
             r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=600, env=env)
         except subprocess.TimeoutExpired:
             return False, "tests timed out after 600s"
-    header = f"[{rt.tc.language}: {' '.join(rt.tc.test)}] [toolchain: {rt.how}] [sandbox: {sandbox_desc}]\n"
+    header = f"[{rt.tc.language}: {rt.test_label()}] [toolchain: {rt.how}] [sandbox: {sandbox_desc}]\n"
     out = (header + (r.stdout + r.stderr)[-8000:]).replace(str(Path.home()), "~")
-    if rt.tc.language == "python" and r.returncode == 5:
+    if rt.tc.language == "python" and not rt.shell and r.returncode == 5:
         return False, "no tests collected\n" + out
     return r.returncode == 0, out
