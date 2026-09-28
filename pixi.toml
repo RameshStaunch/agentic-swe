@@ -30,6 +30,7 @@ agentic_swe = { path = ".", editable = true }
 [activation.env]
 DATABASE_URL = "postgresql+asyncpg://localhost:55432/agentic_swe"
 PYDANTIC_AI_NO_BANNER = "1"
+GH_CONFIG_DIR = "$PIXI_PROJECT_ROOT/.gh"
 
 [tasks]
 db-init = "test -d pgdata || (initdb -D pgdata --auth=trust -U $USER && pg_ctl -D pgdata -l pgdata/log -o '-p 55432 -k /tmp' start && createdb -h localhost -p 55432 agentic_swe && createdb -h localhost -p 55432 url_shortener)"

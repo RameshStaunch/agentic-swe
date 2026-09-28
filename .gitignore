@@ -9,3 +9,4 @@ pgdata/
 examples/*/summary.md.tmp
 runs/
 work/
+.gh/
