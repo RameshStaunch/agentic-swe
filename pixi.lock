@@ -22,6 +22,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cyrus-sasl-2.1.28-hac629b4_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/fastar-0.12.0-py312h15b83fc_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/frozenlist-1.8.0-py312h447239a_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/gh-2.101.0-hfc2019e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/greenlet-3.5.6-py312h80505a6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/httptools-0.8.0-py312h5cc1888_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/icu-78.3-py310h44b86e0_2.conda
@@ -269,6 +270,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cyrus-sasl-2.1.28-h7cc0300_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/fastar-0.12.0-py312h04f4e85_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/frozenlist-1.8.0-py312h90c63f8_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/gh-2.101.0-h5839d16_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/greenlet-3.5.6-py312haab1465_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/httptools-0.8.0-py312h6ea13a3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/icu-78.3-py313hbf1d544_2.conda
@@ -414,6 +416,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cyrus-sasl-2.1.28-hb961e35_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/fastar-0.12.0-py312h5eb8a82_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/frozenlist-1.8.0-py312ha0ce254_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/gh-2.101.0-hf76c51c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/greenlet-3.5.6-py312hdef455b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/httptools-0.8.0-py312h580468c_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/icu-78.3-py310h579977c_2.conda
@@ -649,6 +652,15 @@ packages:
   run_exports: {}
   size: 55016
   timestamp: 1779999817627
+- conda: https://conda.anaconda.org/conda-forge/linux-64/gh-2.101.0-hfc2019e_0.conda
+  sha256: 50150ff329416c4edb487e61dc24c676198ed6fcf82424d655f12a36ab5f240b
+  md5: 5d52968f632c15c53183ce22b8d80144
+  license: Apache-2.0
+  license_family: APACHE
+  purls: []
+  run_exports: {}
+  size: 13955030
+  timestamp: 1789566648905
 - conda: https://conda.anaconda.org/conda-forge/linux-64/greenlet-3.5.6-py312h80505a6_0.conda
   sha256: ec381ab27f211928afd0a976fbf765563a751c3a4cf2fa39174a65a783c85d0d
   md5: aeb718d6d95669b4dcc686750b6c034f
@@ -2957,6 +2969,17 @@ packages:
   run_exports: {}
   size: 52291
   timestamp: 1780000343424
+- conda: https://conda.anaconda.org/conda-forge/osx-64/gh-2.101.0-h5839d16_0.conda
+  sha256: 4afa4a20581af3de7e55bde18b312ed8ecefcfc9db7a830443793318863eeefb
+  md5: 748e1a3e60e716fb3cdf35f4407ec643
+  constrains:
+  - __osx >=10.12
+  license: Apache-2.0
+  license_family: APACHE
+  purls: []
+  run_exports: {}
+  size: 13860416
+  timestamp: 1789566763585
 - conda: https://conda.anaconda.org/conda-forge/osx-64/greenlet-3.5.6-py312haab1465_0.conda
   sha256: a8afa3d363659faf88bcc9381591de66dfdf9cee3b3ee5c2eb5ce7cc7c995dbf
   md5: 453efc088fed2276e1da5882888fc4e7
@@ -3728,6 +3751,15 @@ packages:
   run_exports: {}
   size: 52681
   timestamp: 1780000209812
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/gh-2.101.0-hf76c51c_0.conda
+  sha256: 070657dfcf9dcf425c61722f4ba2215762780471a90b42c9f04e0821f345fc2b
+  md5: 7e44f7931248fb53b6d899759b734099
+  license: Apache-2.0
+  license_family: APACHE
+  purls: []
+  run_exports: {}
+  size: 12536419
+  timestamp: 1789566667484
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/greenlet-3.5.6-py312hdef455b_0.conda
   sha256: 1b2cb6c46e9fbfb56fa71e6a2b37792f2f4ed191b3f06023af2ab565b7afa738
   md5: 0ecf58fc34e99b222069a93db10d8f2f
