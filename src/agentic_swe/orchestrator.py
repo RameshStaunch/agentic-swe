@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.exceptions import ModelHTTPError
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -189,7 +190,14 @@ class Steps:
                 raise RuntimeError(f"replay has no recorded step '{name}' (the run diverged from the recording)")
             out = out_type.model_validate_json(src.read_text())
         else:
-            out = (await agent.run(prompt, deps=deps)).output
+            for attempt in range(4):
+                try:
+                    out = (await agent.run(prompt, deps=deps)).output
+                    break
+                except ModelHTTPError as e:  # rate limits and provider overload are transient
+                    if e.status_code not in (429, 500, 502, 503, 504) or attempt == 3:
+                        raise
+                    await asyncio.sleep(5 * 2 ** attempt)
         (self.dir / f"{name}.json").write_text(out.model_dump_json(indent=2))
         return out
 

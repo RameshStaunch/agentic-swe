@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from rich.console import Console
 
 from . import db
+from .agents import PROVIDER_KEYS
 from .cli import execute, new_run_dir
 from .models import Scope
 
@@ -50,8 +51,8 @@ def _no_terminal(question: str) -> str:
 async def create_run(body: RunRequest) -> dict:
     repo = _inside_workspace(body.repo)
     replay = _inside_workspace(body.replay) if body.replay else None
-    if not replay and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise HTTPException(400, "ANTHROPIC_API_KEY is not set; pass `replay` to replay a recorded run")
+    if not replay and not any(os.environ.get(k) for k in PROVIDER_KEYS):
+        raise HTTPException(400, "no model API key is set; pass `replay` to replay a recorded run")
     run_dir = new_run_dir(body.requirement, None)
     run_id, record = await db.start_run(app.state.engine, body.requirement, body.scope, "full-auto", str(run_dir))
     task = asyncio.create_task(execute(body.requirement, repo, body.scope, "full-auto", ask=_no_terminal, answers=body.answers,

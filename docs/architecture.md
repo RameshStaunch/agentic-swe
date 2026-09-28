@@ -62,4 +62,4 @@ flowchart LR
 - Tests run in the orchestrator's own Python environment; target repos with different dependencies would need a per-repo environment (e.g. a pixi env per target).
 - No sandbox: generated tests execute locally. Container isolation is the obvious next step before pointing this at untrusted requirements.
 - The API only supports full-auto; interactive approvals over HTTP would need a pending-approvals endpoint.
-- Recorded examples were hand-authored (no API key was available); live runs have not been validated end to end yet.
+- Recorded examples were hand-authored (live calls were out of scope for the build); live runs against Gemini/Claude have not been validated end to end yet.

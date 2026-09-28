@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 
 from . import db
+from .agents import PROVIDER_KEYS
 from .models import Mode, Scope
 from .orchestrator import Ask, Gate, Orchestrator, Record, Result
 
@@ -54,8 +55,8 @@ def run(
     """Take a requirement through analysis, planning, build, test, validation and summary."""
     if scope not in ("greenfield", "brownfield") or mode not in ("suggest", "auto-edit", "full-auto"):
         raise typer.BadParameter("scope must be greenfield|brownfield; mode must be suggest|auto-edit|full-auto")
-    if not replay and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise typer.BadParameter("set ANTHROPIC_API_KEY (e.g. in .env) or pass --replay <recorded run dir>")
+    if not replay and not any(os.environ.get(k) for k in PROVIDER_KEYS):
+        raise typer.BadParameter("set GOOGLE_API_KEY or ANTHROPIC_API_KEY (e.g. in .env) or pass --replay <recorded run dir>")
     console = Console(record=True)
     run_dir = new_run_dir(requirement, out)
 

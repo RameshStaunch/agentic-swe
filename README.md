@@ -21,12 +21,15 @@ pixi run db-init          # creates a local Postgres cluster in ./pgdata on port
 
 After a reboot, `pixi run db-start` (and `pixi run db-stop` to stop it).
 
-For live runs, put an Anthropic API key in `.env` (gitignored):
+For live runs, put a model API key in `.env` (gitignored). Google Gemini is used when `GOOGLE_API_KEY` is set, otherwise Anthropic:
 
 ```bash
-echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
-# optional: AGENTIC_SWE_MODEL=anthropic:claude-opus-5-5   (default anthropic:claude-sonnet-5)
+echo 'GOOGLE_API_KEY=...' > .env          # default model google:gemini-flash-latest
+# or ANTHROPIC_API_KEY=...                  (default anthropic:claude-sonnet-5)
+# override with AGENTIC_SWE_MODEL=<pydantic-ai model string>, e.g. google:gemini-pro-latest
 ```
+
+Rate-limit and overload errors (429/5xx) are retried with backoff. Note that the Gemini free tier has no quota for Pro models.
 
 ## Demos (no API key needed)
 
@@ -44,7 +47,7 @@ pixi run demo-ambiguous     # ambiguous,  auto-edit:  "make the notes API faster
 | Brownfield | Impact analysis finds that the tag filter runs in Python, so naive paging would be wrong; fixes both | [summary](examples/brownfield-pagination/summary.md) · [transcript](examples/brownfield-pagination/transcript.txt) · [diff](examples/brownfield-pagination/changes.patch) |
 | Ambiguous | Detects 3 ambiguities, pauses for answers, then fixes an N+1 with a query-count regression test | [summary](examples/ambiguous-make-it-faster/summary.md) · [transcript](examples/ambiguous-make-it-faster/transcript.txt) · [diff](examples/ambiguous-make-it-faster/changes.patch) |
 
-> **How the recordings were made:** no API key was available while building this, so the agent outputs in `examples/*/steps/` were written by hand in the exact typed schemas the agents return. They are a faithful stand-in for model output, not a captured model run. Run any demo without `--replay` (below) to record a live one; it writes the same files.
+> **How the recordings were made:** live calls were out of scope while building this, so the agent outputs in `examples/*/steps/` were written by hand in the exact typed schemas the agents return. They are a faithful stand-in for model output, not a captured model run. Run any demo without `--replay` (below) to record a live one; it writes the same files.
 
 ## Live runs
 

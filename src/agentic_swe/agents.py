@@ -10,7 +10,9 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 
 from .models import CodeChange, DesignDoc, EngineeringSummary, ImpactAnalysis, NormalizedRequirement, TaskGraph, ValidationReport
 
-MODEL = os.environ.get("AGENTIC_SWE_MODEL", "anthropic:claude-sonnet-5")
+MODEL = os.environ.get("AGENTIC_SWE_MODEL") or (
+    "google:gemini-flash-latest" if os.environ.get("GOOGLE_API_KEY") else "anthropic:claude-sonnet-5")
+PROVIDER_KEYS = ("GOOGLE_API_KEY", "ANTHROPIC_API_KEY")
 MAX_READ = 20_000
 
 
