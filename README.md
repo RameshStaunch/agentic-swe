@@ -52,15 +52,15 @@ pixi run demo-ambiguous     # ambiguous,  auto-edit:  "make the notes API faster
 ## Live runs
 
 ```bash
-pixi run python -m agentic_swe.cli run "Build a scalable URL shortener service with APIs, persistence, and analytics." \
+pixi run agentic-swe run "Build a scalable URL shortener service with APIs, persistence, and analytics." \
     --repo url_shortener --scope greenfield --mode suggest
 
-pixi run python -m agentic_swe.cli run "Add rate limiting to note creation" --repo work/notes --scope brownfield --mode auto-edit
+pixi run agentic-swe run "Add rate limiting to note creation" --repo work/notes --scope brownfield --mode auto-edit
 ```
 
 Every run writes `runs/<timestamp>-<slug>/` with `summary.md`, `changes.patch`, `tests.txt`, `transcript.txt` and `steps/*.json` (every agent output, which is also what `--replay` reads). Pass `--out examples/<name>` to record a new example.
 
-Other commands: `agentic-swe runs` (recent runs from the audit trail), `agentic-swe show <id>` (a run's full event log). Use `--no-db` to run without Postgres.
+Other commands: `pixi run agentic-swe runs` (recent runs from the audit trail), `pixi run agentic-swe show <id>` (a run's full event log). Use `--no-db` to run without Postgres.
 
 ## Controlled autonomy
 

@@ -13,3 +13,6 @@ packages = ["src/agentic_swe"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[project.scripts]
+agentic-swe = "agentic_swe.cli:app"
